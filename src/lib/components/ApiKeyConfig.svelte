@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { config, type ApiKeyEntry } from '$lib/stores/config';
+	import { config, type ApiKeyEntry, type Environment } from '$lib/stores/config';
 	
 	interface Props {
 		onKeyChanged?: () => void;
@@ -15,6 +15,7 @@
 	// Add/Edit form fields
 	let keyName = $state('');
 	let keyValue = $state('');
+	let keyEnvironment = $state<Environment>('prod');
 	let showKeyValue = $state(false);
 	
 	let hasKey = $derived(!!$config.apiKey);
@@ -51,6 +52,7 @@
 	function resetForm() {
 		keyName = '';
 		keyValue = '';
+		keyEnvironment = 'prod';
 		showKeyValue = false;
 	}
 	
@@ -64,6 +66,7 @@
 		editingKey = entry;
 		keyName = entry.name;
 		keyValue = entry.key;
+		keyEnvironment = entry.environment;
 		showAddForm = true;
 	}
 	
@@ -77,9 +80,9 @@
 		if (!keyName.trim() || !keyValue.trim()) return;
 		
 		if (editingKey) {
-			config.updateApiKey(editingKey.id, keyName.trim(), keyValue.trim());
+			config.updateApiKey(editingKey.id, keyName.trim(), keyValue.trim(), keyEnvironment);
 		} else {
-			config.addApiKey(keyName.trim(), keyValue.trim());
+			config.addApiKey(keyName.trim(), keyValue.trim(), keyEnvironment);
 		}
 		
 		showAddForm = false;
@@ -92,7 +95,22 @@
 	}
 	
 	function selectKey(id: string) {
+		if (id === $config.selectedKeyId) {
+			// Same key, just close the modal
+			showModal = false;
+			return;
+		}
+		
 		config.selectApiKey(id);
+		showModal = false;
+		showAddForm = false;
+		editingKey = null;
+		resetForm();
+		
+		// Notify parent that the key changed
+		if (onKeyChanged) {
+			onKeyChanged();
+		}
 	}
 	
 	function maskKey(key: string): string {
@@ -105,15 +123,15 @@
 	onclick={openModal}
 	class="flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors
 		{hasKey 
-			? 'bg-green-900/50 text-green-400 hover:bg-green-900/70 border border-green-700' 
-			: 'bg-yellow-900/50 text-yellow-400 hover:bg-yellow-900/70 border border-yellow-700'}"
+			? 'bg-yellow-900/20 text-yellow-500 hover:bg-yellow-900/30 border border-yellow-800/50' 
+			: 'bg-red-900/50 text-red-400 hover:bg-red-900/70 border border-red-700'}"
 >
 	<svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 		<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
 		<circle cx="12" cy="12" r="3"/>
 	</svg>
 	{#if hasKey}
-		<span class="hidden sm:inline">{selectedKeyName()} <span class="text-green-500/70 font-mono text-xs">({selectedKeyPreview()})</span></span>
+		<span class="hidden sm:inline">{selectedKeyName()} <span class="text-yellow-300/50 font-mono text-xs">({selectedKeyPreview()})</span></span>
 		<span class="sm:hidden">Key Set</span>
 	{:else}
 		<span>Configure API Key</span>
@@ -171,7 +189,12 @@
 									{/if}
 								</div>
 								<div class="flex-1 min-w-0">
-									<div class="font-medium text-gray-100 truncate">{entry.name}</div>
+									<div class="flex items-center gap-2">
+										<span class="font-medium text-gray-100 truncate">{entry.name}</span>
+										<span class="px-1.5 py-0.5 text-[10px] font-semibold uppercase rounded {entry.environment === 'test' ? 'bg-red-900/50 text-red-400 border border-red-700' : 'bg-green-900/50 text-green-400 border border-green-700'}">
+											{entry.environment === 'test' ? 'DEV' : 'PROD'}
+										</span>
+									</div>
 									<div class="text-xs text-gray-500 font-mono">{maskKey(entry.key)}</div>
 								</div>
 								<div class="flex items-center gap-1">
@@ -268,6 +291,40 @@
 									</svg>
 								{/if}
 							</button>
+						</div>
+					</div>
+					
+					<div>
+						<label class="block text-sm font-medium text-gray-300 mb-1">
+							Environment *
+						</label>
+						<div class="flex gap-3">
+							<label class="flex items-center gap-2 cursor-pointer">
+								<input
+									type="radio"
+									name="key-environment"
+									value="prod"
+									bind:group={keyEnvironment}
+									class="w-4 h-4 text-green-600 bg-gray-800 border-gray-600 focus:ring-green-500"
+								/>
+								<span class="text-sm text-gray-300">Production</span>
+								<span class="px-1.5 py-0.5 text-[10px] font-semibold uppercase rounded bg-green-900/50 text-green-400 border border-green-700">
+									device.cardknox.com
+								</span>
+							</label>
+							<label class="flex items-center gap-2 cursor-pointer">
+								<input
+									type="radio"
+									name="key-environment"
+									value="test"
+									bind:group={keyEnvironment}
+									class="w-4 h-4 text-red-600 bg-gray-800 border-gray-600 focus:ring-red-500"
+								/>
+								<span class="text-sm text-gray-300">Dev</span>
+								<span class="px-1.5 py-0.5 text-[10px] font-semibold uppercase rounded bg-red-900/50 text-red-400 border border-red-700">
+									devdevice.cardknox.com
+								</span>
+							</label>
 						</div>
 					</div>
 				</div>

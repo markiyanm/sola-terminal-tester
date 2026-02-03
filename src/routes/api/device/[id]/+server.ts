@@ -1,11 +1,19 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
-const CLOUDIM_BASE_URL = 'https://device.cardknox.com/v1';
+type Environment = 'prod' | 'test';
+
+function getBaseUrl(environment: Environment): string {
+	return environment === 'test' 
+		? 'https://devdevice.cardknox.com/v1'
+		: 'https://device.cardknox.com/v1';
+}
 
 export const GET: RequestHandler = async ({ params, url }) => {
 	const deviceId = params.id;
-	const endpoint = `${CLOUDIM_BASE_URL}/Device/${deviceId}`;
+	const environment = (url.searchParams.get('environment') || 'prod') as Environment;
+	const baseUrl = getBaseUrl(environment);
+	const endpoint = `${baseUrl}/Device/${deviceId}`;
 	
 	try {
 		const apiKey = url.searchParams.get('apiKey');
@@ -44,11 +52,13 @@ export const GET: RequestHandler = async ({ params, url }) => {
 
 export const PUT: RequestHandler = async ({ params, request }) => {
 	const deviceId = params.id;
-	const endpoint = `${CLOUDIM_BASE_URL}/Device/${deviceId}`;
 	let requestBody: Record<string, unknown> = {};
+	let endpoint = '';
 	
 	try {
-		const { apiKey, friendlyName } = await request.json();
+		const { apiKey, friendlyName, environment = 'prod' } = await request.json();
+		const baseUrl = getBaseUrl(environment);
+		endpoint = `${baseUrl}/Device/${deviceId}`;
 
 		if (!apiKey) {
 			return json({ error: 'API key is required' }, { status: 400 });
@@ -95,11 +105,13 @@ export const PUT: RequestHandler = async ({ params, request }) => {
 
 export const DELETE: RequestHandler = async ({ params, request }) => {
 	const deviceId = params.id;
-	const endpoint = `${CLOUDIM_BASE_URL}/Device/${deviceId}`;
 	const requestHeaders = { 'Authorization': '[REDACTED]' };
+	let endpoint = '';
 	
 	try {
-		const { apiKey } = await request.json();
+		const { apiKey, environment = 'prod' } = await request.json();
+		const baseUrl = getBaseUrl(environment);
+		endpoint = `${baseUrl}/Device/${deviceId}`;
 
 		if (!apiKey) {
 			return json({ error: 'API key is required' }, { status: 400 });

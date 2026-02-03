@@ -10,6 +10,29 @@
 	let error = $state<string | null>(null);
 	let copiedField = $state<string | null>(null);
 	let copyTimeout: ReturnType<typeof setTimeout> | null = null;
+	let lastRefreshTime = $state<Date | null>(null);
+	
+	// Track API key changes to clear errors
+	let lastApiKey = $state<string | null>(null);
+	$effect(() => {
+		if ($config.apiKey !== lastApiKey) {
+			lastApiKey = $config.apiKey;
+			error = null;
+		}
+	});
+	
+	// Track device selection changes to clear errors
+	let lastSelectedDeviceId = $state<string | null>(null);
+	$effect(() => {
+		if ($selectedDeviceId !== lastSelectedDeviceId) {
+			lastSelectedDeviceId = $selectedDeviceId;
+			error = null;
+		}
+	});
+	
+	function formatRefreshTime(date: Date): string {
+		return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+	}
 	
 	// Register form fields
 	let serialNumber = $state('');
@@ -39,7 +62,8 @@
 				$config.apiKey,
 				serialNumber.trim(),
 				deviceMake,
-				friendlyName.trim()
+				friendlyName.trim(),
+				$config.selectedEnvironment
 			);
 			
 			if (result.xResult === 'S' && result.xDeviceId) {
@@ -79,20 +103,23 @@
 		
 		isLoading = true;
 		error = null;
+		// Clear devices immediately to avoid showing stale data during refresh
+		devices.setDevices([]);
 		
 		try {
-			const result = await listDevices($config.apiKey);
+			const result = await listDevices($config.apiKey, $config.selectedEnvironment);
 			
 			if (result.xResult === 'S' && result.xDevices) {
 				devices.setDevices(result.xDevices);
+				lastRefreshTime = new Date();
 			} else if (result.error || result.xError) {
 				error = result.error || result.xError || 'Failed to list devices';
-			} else {
-				// No devices found
-				devices.setDevices([]);
+				lastRefreshTime = null;
 			}
+			// If no devices found, list stays empty (already cleared above)
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to list devices';
+			lastRefreshTime = null;
 		} finally {
 			isLoading = false;
 		}
@@ -102,7 +129,7 @@
 		if (!$config.apiKey) return;
 		
 		try {
-			const result = await getDeviceStatus($config.apiKey, deviceId);
+			const result = await getDeviceStatus($config.apiKey, deviceId, $config.selectedEnvironment);
 			if (result.xDeviceStatus) {
 				devices.updateDeviceStatus(deviceId, result.xDeviceStatus);
 			}
@@ -169,7 +196,7 @@
 		error = null;
 		
 		try {
-			const result = await updateDevice($config.apiKey, editDeviceId, editFriendlyName.trim());
+			const result = await updateDevice($config.apiKey, editDeviceId, editFriendlyName.trim(), $config.selectedEnvironment);
 			
 			if (result.xResult === 'S') {
 				devices.addDevice({
@@ -202,7 +229,7 @@
 		showDeleteConfirm = false;
 		
 		try {
-			const result = await deleteDevice($config.apiKey, editDeviceId);
+			const result = await deleteDevice($config.apiKey, editDeviceId, $config.selectedEnvironment);
 			
 			if (result.xResult === 'S') {
 				devices.removeDevice(editDeviceId);
@@ -225,7 +252,12 @@
 <div class="bg-gray-900 rounded-xl shadow-lg border border-gray-800 p-5">
 	<div class="flex items-center justify-between mb-4">
 		<h2 class="text-lg font-semibold text-gray-100">Devices</h2>
-		<div class="flex gap-2">
+		<div class="flex items-center gap-2">
+			{#if lastRefreshTime}
+				<span class="text-xs text-gray-500">
+					Last updated: {formatRefreshTime(lastRefreshTime)}
+				</span>
+			{/if}
 			<button
 				onclick={refreshDevices}
 				disabled={isLoading || !$config.apiKey}
@@ -252,21 +284,25 @@
 	</div>
 	
 	{#if error}
-		<div class="mb-4 p-3 bg-red-900/50 border border-red-700 rounded-lg text-sm text-red-400">
-			{error}
+		<div class="mb-4 p-3 bg-red-900/50 border border-red-700 rounded-lg text-sm text-red-400 flex items-center justify-between">
+			<span>{error}</span>
+			<button
+				onclick={() => error = null}
+				class="p-1 text-red-400 hover:text-red-200 hover:bg-red-800/50 rounded transition-colors flex-shrink-0 ml-2"
+				title="Dismiss"
+			>
+				<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<line x1="18" y1="6" x2="6" y2="18"/>
+					<line x1="6" y1="6" x2="18" y2="18"/>
+				</svg>
+			</button>
 		</div>
 	{/if}
 	
 	{#if !$config.apiKey}
 		<p class="text-sm text-gray-500 italic">Configure your API key to manage devices</p>
 	{:else if $devices.length === 0}
-		<p class="text-sm text-gray-500 italic mb-3">No devices registered</p>
-		<button
-			onclick={refreshDevices}
-			class="text-sm text-blue-400 hover:underline"
-		>
-			Refresh from API
-		</button>
+		<p class="text-sm text-gray-500 italic">No devices registered</p>
 	{:else}
 		<div class="overflow-x-auto -mx-5">
 			<table class="w-full text-sm">
@@ -396,8 +432,18 @@
 			<h2 class="text-xl font-semibold text-gray-100 mb-4">Register New Device</h2>
 			
 			{#if error}
-				<div class="mb-4 p-3 bg-red-900/50 border border-red-700 rounded-lg text-sm text-red-400">
-					{error}
+				<div class="mb-4 p-3 bg-red-900/50 border border-red-700 rounded-lg text-sm text-red-400 flex items-center justify-between">
+					<span>{error}</span>
+					<button
+						onclick={() => error = null}
+						class="p-1 text-red-400 hover:text-red-200 hover:bg-red-800/50 rounded transition-colors flex-shrink-0 ml-2"
+						title="Dismiss"
+					>
+						<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+							<line x1="18" y1="6" x2="6" y2="18"/>
+							<line x1="6" y1="6" x2="18" y2="18"/>
+						</svg>
+					</button>
 				</div>
 			{/if}
 			
@@ -474,8 +520,18 @@
 			<h2 class="text-xl font-semibold text-gray-100 mb-4">Edit Device</h2>
 			
 			{#if error}
-				<div class="mb-4 p-3 bg-red-900/50 border border-red-700 rounded-lg text-sm text-red-400">
-					{error}
+				<div class="mb-4 p-3 bg-red-900/50 border border-red-700 rounded-lg text-sm text-red-400 flex items-center justify-between">
+					<span>{error}</span>
+					<button
+						onclick={() => error = null}
+						class="p-1 text-red-400 hover:text-red-200 hover:bg-red-800/50 rounded transition-colors flex-shrink-0 ml-2"
+						title="Dismiss"
+					>
+						<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+							<line x1="18" y1="6" x2="6" y2="18"/>
+							<line x1="6" y1="6" x2="18" y2="18"/>
+						</svg>
+					</button>
 				</div>
 			{/if}
 			

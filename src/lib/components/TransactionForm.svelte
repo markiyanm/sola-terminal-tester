@@ -23,12 +23,22 @@
 	let error = $state<string | null>(null);
 	let bypassStatusCheck = $state(false);
 	
-	// Track device changes to reset bypass
+	// Track device changes to reset bypass and clear errors
 	let lastDeviceId = $state<string | null>(null);
 	$effect(() => {
 		if ($selectedDeviceId !== lastDeviceId) {
 			lastDeviceId = $selectedDeviceId;
 			bypassStatusCheck = false;
+			error = null;
+		}
+	});
+	
+	// Track API key changes to clear errors
+	let lastApiKey = $state<string | null>(null);
+	$effect(() => {
+		if ($config.apiKey !== lastApiKey) {
+			lastApiKey = $config.apiKey;
+			error = null;
 		}
 	});
 	
@@ -78,7 +88,8 @@
 				amount: amount || undefined,
 				enableTipPrompt,
 				invoice: invoice || undefined,
-				tip: tip || undefined
+				tip: tip || undefined,
+				environment: $config.selectedEnvironment
 			});
 			
 			const debug = extractDebugInfo(result);
@@ -111,7 +122,7 @@
 		error = null;
 		
 		try {
-			const result = await cancelSession($config.apiKey, sessionId, deviceId);
+			const result = await cancelSession($config.apiKey, sessionId, deviceId, $config.selectedEnvironment);
 			const debug = extractDebugInfo(result);
 			if (debug) {
 				session.setSessionStatusDebug(debug);
@@ -158,8 +169,18 @@
 	</div>
 	
 	{#if error}
-		<div class="mb-4 p-3 bg-red-900/50 border border-red-700 rounded-lg text-sm text-red-400">
-			{error}
+		<div class="mb-4 p-3 bg-red-900/50 border border-red-700 rounded-lg text-sm text-red-400 flex items-center justify-between">
+			<span>{error}</span>
+			<button
+				onclick={() => error = null}
+				class="p-1 text-red-400 hover:text-red-200 hover:bg-red-800/50 rounded transition-colors flex-shrink-0 ml-2"
+				title="Dismiss"
+			>
+				<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<line x1="18" y1="6" x2="6" y2="18"/>
+					<line x1="6" y1="6" x2="18" y2="18"/>
+				</svg>
+			</button>
 		</div>
 	{/if}
 	

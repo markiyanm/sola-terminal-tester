@@ -42,7 +42,7 @@
 		error = null;
 		
 		try {
-			const result = await getSessionStatus($config.apiKey, $session.sessionId);
+			const result = await getSessionStatus($config.apiKey, $session.sessionId, $config.selectedEnvironment);
 			const debug = extractDebugInfo(result);
 			if (debug) {
 				session.setSessionStatusDebug(debug);

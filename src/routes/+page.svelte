@@ -26,7 +26,7 @@
 
 <svelte:head>
 	<title>Sola Terminal Tester</title>
-	<meta name="description" content="Test credit card terminals via CloudIM API" />
+	<meta name="description" content="Test Sola Terminals via CloudIM API" />
 </svelte:head>
 
 <div class="min-h-screen bg-gray-950">
@@ -37,9 +37,16 @@
 				<div class="flex items-center gap-3">
 					<img src="/logo.svg" alt="Sola" class="h-6" />
 					<span class="text-gray-500">|</span>
-					<span class="text-sm text-gray-400">Terminal Tester</span>
+					<span class="text-sm text-gray-400">CloudIM / Sola Terminal Test Utility</span>
 				</div>
-				<ApiKeyConfig onKeyChanged={handleApiKeyChanged} />
+				<div class="flex items-center gap-3">
+					{#if $config.apiKey}
+						<span class="px-2 py-1 text-xs font-semibold uppercase rounded {$config.selectedEnvironment === 'test' ? 'bg-red-900/50 text-red-400 border border-red-700' : 'bg-green-900/50 text-green-400 border border-green-700'}">
+							{$config.selectedEnvironment === 'test' ? 'DEV' : 'PROD'}
+						</span>
+					{/if}
+					<ApiKeyConfig onKeyChanged={handleApiKeyChanged} />
+				</div>
 			</div>
 		</div>
 	</header>
@@ -104,6 +111,6 @@
 	
 	<!-- Footer -->
 	<footer class="mt-auto py-6 text-center text-sm text-gray-600">
-		<p>Sola Terminal Tester v1.0.0 | Internal Testing Tool</p>
+		<p>Internal use only | v1.0.1 | Updated: 2/3/2026</p>
 	</footer>
 </div>

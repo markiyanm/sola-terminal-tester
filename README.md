@@ -32,21 +32,7 @@ npm run dev
 
 ### Usage
 
-1. **Configure API Key**: Click the settings button in the header and enter your Sola API key (found in Portal > Account Settings > Keys)
-
-2. **Register a Device**: Click "Register" in the Device panel, enter the terminal's serial number and a friendly name
-
-3. **Verify Connection**: Ensure the device shows "CONNECTED" status
-
-4. **Process Transaction**: 
-   - Select transaction type
-   - Enter amount (if required)
-   - Click "Initiate Transaction"
-   - The terminal will prompt for card information
-
-5. **Check Results**:
-   - Click "Check Session Status" to poll the CloudIM API
-   - Once completed, click "Check Transaction Result" to query the Reporting API
+For a full walkthrough with screenshots, see `docs/GETTING_STARTED.md`.
 
 ## API Routes
 

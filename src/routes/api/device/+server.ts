@@ -1,14 +1,22 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
-const CLOUDIM_BASE_URL = 'https://device.cardknox.com/v1';
+type Environment = 'prod' | 'test';
+
+function getBaseUrl(environment: Environment): string {
+	return environment === 'test' 
+		? 'https://devdevice.cardknox.com/v1'
+		: 'https://device.cardknox.com/v1';
+}
 
 export const POST: RequestHandler = async ({ request }) => {
-	const endpoint = `${CLOUDIM_BASE_URL}/Device`;
 	let requestBody: Record<string, unknown> = {};
+	let endpoint = '';
 	
 	try {
-		const { apiKey, serialNumber, deviceMake, friendlyName } = await request.json();
+		const { apiKey, serialNumber, deviceMake, friendlyName, environment = 'prod' } = await request.json();
+		const baseUrl = getBaseUrl(environment);
+		endpoint = `${baseUrl}/Device`;
 
 		if (!apiKey) {
 			return json({ error: 'API key is required' }, { status: 400 });
@@ -48,7 +56,9 @@ export const POST: RequestHandler = async ({ request }) => {
 };
 
 export const GET: RequestHandler = async ({ url }) => {
-	const endpoint = `${CLOUDIM_BASE_URL}/Device`;
+	const environment = (url.searchParams.get('environment') || 'prod') as Environment;
+	const baseUrl = getBaseUrl(environment);
+	const endpoint = `${baseUrl}/Device`;
 	
 	try {
 		const apiKey = url.searchParams.get('apiKey');

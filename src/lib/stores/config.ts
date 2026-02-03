@@ -16,20 +16,24 @@ function deobfuscate(str: string): string {
 	}
 }
 
+export type Environment = 'prod' | 'test';
+
 export interface ApiKeyEntry {
 	id: string;
 	name: string;
 	key: string;
+	environment: Environment;
 }
 
 interface Config {
 	apiKey: string; // Currently selected key
 	apiKeys: ApiKeyEntry[]; // All saved keys
 	selectedKeyId: string | null;
+	selectedEnvironment: Environment; // Currently selected environment
 }
 
 function loadConfig(): Config {
-	if (!browser) return { apiKey: '', apiKeys: [], selectedKeyId: null };
+	if (!browser) return { apiKey: '', apiKeys: [], selectedKeyId: null, selectedEnvironment: 'prod' };
 	
 	try {
 		const stored = localStorage.getItem(STORAGE_KEY);
@@ -43,17 +47,19 @@ function loadConfig(): Config {
 					const id = crypto.randomUUID();
 					return {
 						apiKey: legacyKey,
-						apiKeys: [{ id, name: 'Default', key: legacyKey }],
-						selectedKeyId: id
+						apiKeys: [{ id, name: 'Default', key: legacyKey, environment: 'prod' }],
+						selectedKeyId: id,
+						selectedEnvironment: 'prod'
 					};
 				}
 			}
 			
-			// New multi-key format
-			const apiKeys: ApiKeyEntry[] = (parsed.apiKeys || []).map((entry: { id: string; name: string; key: string }) => ({
+			// New multi-key format with environment support
+			const apiKeys: ApiKeyEntry[] = (parsed.apiKeys || []).map((entry: { id: string; name: string; key: string; environment?: Environment }) => ({
 				id: entry.id,
 				name: entry.name,
-				key: deobfuscate(entry.key || '')
+				key: deobfuscate(entry.key || ''),
+				environment: entry.environment || 'prod' // Default to prod for migrated keys
 			}));
 			
 			const selectedKeyId = parsed.selectedKeyId || null;
@@ -62,14 +68,15 @@ function loadConfig(): Config {
 			return {
 				apiKey: selectedEntry?.key || '',
 				apiKeys,
-				selectedKeyId
+				selectedKeyId,
+				selectedEnvironment: selectedEntry?.environment || 'prod'
 			};
 		}
 	} catch (e) {
 		console.error('Failed to load config:', e);
 	}
 	
-	return { apiKey: '', apiKeys: [], selectedKeyId: null };
+	return { apiKey: '', apiKeys: [], selectedKeyId: null, selectedEnvironment: 'prod' };
 }
 
 function saveConfig(config: Config) {
@@ -80,7 +87,8 @@ function saveConfig(config: Config) {
 			apiKeys: config.apiKeys.map(entry => ({
 				id: entry.id,
 				name: entry.name,
-				key: obfuscate(entry.key)
+				key: obfuscate(entry.key),
+				environment: entry.environment
 			})),
 			selectedKeyId: config.selectedKeyId
 		}));
@@ -94,31 +102,34 @@ function createConfigStore() {
 
 	return {
 		subscribe,
-		addApiKey: (name: string, key: string) => {
+		addApiKey: (name: string, key: string, environment: Environment = 'prod') => {
 			update(config => {
 				const id = crypto.randomUUID();
-				const newEntry: ApiKeyEntry = { id, name, key };
+				const newEntry: ApiKeyEntry = { id, name, key, environment };
 				const newKeys = [...config.apiKeys, newEntry];
 				const newConfig = {
 					...config,
 					apiKeys: newKeys,
 					selectedKeyId: id,
-					apiKey: key
+					apiKey: key,
+					selectedEnvironment: environment
 				};
 				saveConfig(newConfig);
 				return newConfig;
 			});
 		},
-		updateApiKey: (id: string, name: string, key: string) => {
+		updateApiKey: (id: string, name: string, key: string, environment: Environment) => {
 			update(config => {
 				const newKeys = config.apiKeys.map(entry => 
-					entry.id === id ? { ...entry, name, key } : entry
+					entry.id === id ? { ...entry, name, key, environment } : entry
 				);
 				const isSelected = config.selectedKeyId === id;
+				const updatedEntry = newKeys.find(e => e.id === id);
 				const newConfig = {
 					...config,
 					apiKeys: newKeys,
-					apiKey: isSelected ? key : config.apiKey
+					apiKey: isSelected ? key : config.apiKey,
+					selectedEnvironment: isSelected && updatedEntry ? updatedEntry.environment : config.selectedEnvironment
 				};
 				saveConfig(newConfig);
 				return newConfig;
@@ -129,18 +140,21 @@ function createConfigStore() {
 				const newKeys = config.apiKeys.filter(entry => entry.id !== id);
 				let newSelectedId = config.selectedKeyId;
 				let newApiKey = config.apiKey;
+				let newEnvironment = config.selectedEnvironment;
 				
 				if (config.selectedKeyId === id) {
 					// Select the first remaining key, or null if none left
 					newSelectedId = newKeys.length > 0 ? newKeys[0].id : null;
 					newApiKey = newKeys.length > 0 ? newKeys[0].key : '';
+					newEnvironment = newKeys.length > 0 ? newKeys[0].environment : 'prod';
 				}
 				
 				const newConfig = {
 					...config,
 					apiKeys: newKeys,
 					selectedKeyId: newSelectedId,
-					apiKey: newApiKey
+					apiKey: newApiKey,
+					selectedEnvironment: newEnvironment
 				};
 				saveConfig(newConfig);
 				return newConfig;
@@ -154,7 +168,8 @@ function createConfigStore() {
 				const newConfig = {
 					...config,
 					selectedKeyId: id,
-					apiKey: entry.key
+					apiKey: entry.key,
+					selectedEnvironment: entry.environment
 				};
 				saveConfig(newConfig);
 				return newConfig;
@@ -166,10 +181,11 @@ function createConfigStore() {
 				if (config.apiKeys.length === 0) {
 					// Create a new entry
 					const id = crypto.randomUUID();
-					const newConfig = {
+					const newConfig: Config = {
 						apiKey,
-						apiKeys: [{ id, name: 'Default', key: apiKey }],
-						selectedKeyId: id
+						apiKeys: [{ id, name: 'Default', key: apiKey, environment: 'prod' }],
+						selectedKeyId: id,
+						selectedEnvironment: 'prod'
 					};
 					saveConfig(newConfig);
 					return newConfig;
@@ -187,7 +203,7 @@ function createConfigStore() {
 		},
 		clearApiKey: () => {
 			update(config => {
-				const newConfig = { ...config, apiKey: '', apiKeys: [], selectedKeyId: null };
+				const newConfig: Config = { ...config, apiKey: '', apiKeys: [], selectedKeyId: null, selectedEnvironment: 'prod' };
 				saveConfig(newConfig);
 				return newConfig;
 			});

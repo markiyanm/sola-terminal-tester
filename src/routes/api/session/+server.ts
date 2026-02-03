@@ -1,12 +1,18 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
-const CLOUDIM_BASE_URL = 'https://device.cardknox.com/v1';
+type Environment = 'prod' | 'test';
+
+function getBaseUrl(environment: Environment): string {
+	return environment === 'test' 
+		? 'https://devdevice.cardknox.com/v1'
+		: 'https://device.cardknox.com/v1';
+}
 
 export const POST: RequestHandler = async ({ request }) => {
-	const endpoint = `${CLOUDIM_BASE_URL}/Session/initiate`;
 	let requestBody: Record<string, unknown> = {};
 	let requestHeaders: Record<string, string> = {};
+	let endpoint = '';
 	
 	try {
 		const { 
@@ -17,8 +23,12 @@ export const POST: RequestHandler = async ({ request }) => {
 			enableTipPrompt, 
 			invoice, 
 			tip,
-			externalRequestId 
+			externalRequestId,
+			environment = 'prod'
 		} = await request.json();
+		
+		const baseUrl = getBaseUrl(environment);
+		endpoint = `${baseUrl}/Session/initiate`;
 
 		if (!apiKey) {
 			return json({ error: 'API key is required' }, { status: 400 });
