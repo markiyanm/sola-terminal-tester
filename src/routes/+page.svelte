@@ -121,6 +121,6 @@
 	
 	<!-- Footer -->
 	<footer class="mt-auto py-6 text-center text-sm text-gray-600">
-		<p>Internal use only | v1.0.1 | Updated: 2/3/2026</p>
+		<p>Internal use only | v1.0.2</p>
 	</footer>
 </div>
