@@ -11,6 +11,25 @@
 	let copiedField = $state<string | null>(null);
 	let copyTimeout: ReturnType<typeof setTimeout> | null = null;
 	let lastRefreshTime = $state<Date | null>(null);
+	let hoveredDeviceId = $state<string | null>(null);
+	let tooltipPosition = $state<{ x: number; y: number } | null>(null);
+	
+	function handleAppVersionHover(device: Device, event: MouseEvent) {
+		hoveredDeviceId = device.xDeviceId;
+		const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+		// Position below the element, and ensure it doesn't go off-screen on the right
+		const tooltipWidth = 320;
+		let x = rect.left;
+		if (x + tooltipWidth > window.innerWidth - 16) {
+			x = window.innerWidth - tooltipWidth - 16;
+		}
+		tooltipPosition = { x, y: rect.bottom + 8 };
+	}
+	
+	function handleAppVersionLeave() {
+		hoveredDeviceId = null;
+		tooltipPosition = null;
+	}
 	
 	// Track API key changes to clear errors
 	let lastApiKey = $state<string | null>(null);
@@ -110,7 +129,12 @@
 			const result = await listDevices($config.apiKey, $config.selectedEnvironment);
 			
 			if (result.xResult === 'S' && result.xDevices) {
-				devices.setDevices(result.xDevices);
+				// Attach raw JSON to each device for tooltip display
+				const devicesWithRawJson = result.xDevices.map(device => ({
+					...device,
+					_rawJson: { ...device } as Record<string, unknown>
+				}));
+				devices.setDevices(devicesWithRawJson);
 				lastRefreshTime = new Date();
 			} else if (result.error || result.xError) {
 				error = result.error || result.xError || 'Failed to list devices';
@@ -405,7 +429,13 @@
 								{/if}
 							</td>
 							<td class="px-3 py-3 font-mono text-gray-400">{device.xDeviceLocalIpAddress || '-'}</td>
-							<td class="px-3 py-3 text-gray-400">{device.xDeviceCardknoxApplicationVersion || '-'}</td>
+							<td 
+								class="px-3 py-3 text-gray-400 cursor-help"
+								onmouseenter={(e) => handleAppVersionHover(device, e)}
+								onmouseleave={handleAppVersionLeave}
+							>
+								<span class="border-b border-dotted border-gray-600">{device.xDeviceCardknoxApplicationVersion || '-'}</span>
+							</td>
 							<td class="px-3 py-3">
 								<button
 									onclick={(e) => openEditModal(device, e)}
@@ -609,4 +639,17 @@
 			</div>
 		</div>
 	</div>
+{/if}
+
+{#if hoveredDeviceId && tooltipPosition}
+	{@const hoveredDevice = $devices.find(d => d.xDeviceId === hoveredDeviceId)}
+	{#if hoveredDevice?._rawJson}
+		<div 
+			class="fixed z-[9999] w-80 max-h-96 overflow-auto bg-gray-800 border border-gray-600 rounded-lg shadow-2xl p-3 pointer-events-none"
+			style="left: {tooltipPosition.x}px; top: {tooltipPosition.y}px;"
+		>
+			<div class="text-xs font-medium text-gray-300 mb-2">Raw Device Data</div>
+			<pre class="text-xs text-gray-400 whitespace-pre-wrap break-words font-mono">{JSON.stringify(hoveredDevice._rawJson, null, 2)}</pre>
+		</div>
+	{/if}
 {/if}

@@ -14,6 +14,7 @@ export interface Device {
 	xDeviceLocalIpAddress?: string;
 	xDeviceOSVersion?: string;
 	xDeviceCardknoxApplicationVersion?: string;
+	_rawJson?: Record<string, unknown>;
 }
 
 function loadDevices(): Device[] {
