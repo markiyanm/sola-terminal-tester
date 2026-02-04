@@ -41,9 +41,19 @@
 				</div>
 				<div class="flex items-center gap-3">
 					{#if $config.apiKey}
-						<span class="px-2 py-1 text-xs font-semibold uppercase rounded {$config.selectedEnvironment === 'test' ? 'bg-red-900/50 text-red-400 border border-red-700' : 'bg-green-900/50 text-green-400 border border-green-700'}">
-							{$config.selectedEnvironment === 'test' ? 'DEV' : 'PROD'}
-						</span>
+						{#if $config.selectedEnvironment === 'custom'}
+							<span class="px-2 py-1 text-xs font-semibold uppercase rounded bg-yellow-900/50 text-yellow-400 border border-yellow-700">
+								CUSTOM
+							</span>
+						{:else if $config.selectedEnvironment === 'test'}
+							<span class="px-2 py-1 text-xs font-semibold uppercase rounded bg-red-900/50 text-red-400 border border-red-700">
+								DEV
+							</span>
+						{:else}
+							<span class="px-2 py-1 text-xs font-semibold uppercase rounded bg-green-900/50 text-green-400 border border-green-700">
+								PROD
+							</span>
+						{/if}
 					{/if}
 					<ApiKeyConfig onKeyChanged={handleApiKeyChanged} />
 				</div>

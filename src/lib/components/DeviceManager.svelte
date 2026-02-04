@@ -82,7 +82,8 @@
 				serialNumber.trim(),
 				deviceMake,
 				friendlyName.trim(),
-				$config.selectedEnvironment
+				$config.selectedEnvironment,
+				$config.customBaseUrl
 			);
 			
 			if (result.xResult === 'S' && result.xDeviceId) {
@@ -126,7 +127,7 @@
 		devices.setDevices([]);
 		
 		try {
-			const result = await listDevices($config.apiKey, $config.selectedEnvironment);
+			const result = await listDevices($config.apiKey, $config.selectedEnvironment, $config.customBaseUrl);
 			
 			if (result.xResult === 'S' && result.xDevices) {
 				// Attach raw JSON to each device for tooltip display
@@ -137,7 +138,24 @@
 				devices.setDevices(devicesWithRawJson);
 				lastRefreshTime = new Date();
 			} else if (result.error || result.xError) {
-				error = result.error || result.xError || 'Failed to list devices';
+				// Build a more descriptive error message
+				let errorMsg = result.error || result.xError || 'Failed to list devices';
+				
+				// Add endpoint info for debugging (but not the confusing HTTP status for 200 responses)
+				const debugEndpoint = result._debug?.endpoint;
+				const httpStatus = result._debug?.responseStatus;
+				
+				// Only show HTTP status if it's an actual HTTP error (not 200)
+				if (httpStatus && httpStatus !== 200) {
+					errorMsg += ` [HTTP ${httpStatus}]`;
+				}
+				
+				// Show the endpoint that was tried (useful for custom URLs)
+				if (debugEndpoint) {
+					errorMsg += ` — Endpoint: ${debugEndpoint}`;
+				}
+				
+				error = errorMsg;
 				lastRefreshTime = null;
 			}
 			// If no devices found, list stays empty (already cleared above)
@@ -153,7 +171,7 @@
 		if (!$config.apiKey) return;
 		
 		try {
-			const result = await getDeviceStatus($config.apiKey, deviceId, $config.selectedEnvironment);
+			const result = await getDeviceStatus($config.apiKey, deviceId, $config.selectedEnvironment, $config.customBaseUrl);
 			if (result.xDeviceStatus) {
 				devices.updateDeviceStatus(deviceId, result.xDeviceStatus);
 			}
@@ -220,7 +238,7 @@
 		error = null;
 		
 		try {
-			const result = await updateDevice($config.apiKey, editDeviceId, editFriendlyName.trim(), $config.selectedEnvironment);
+			const result = await updateDevice($config.apiKey, editDeviceId, editFriendlyName.trim(), $config.selectedEnvironment, $config.customBaseUrl);
 			
 			if (result.xResult === 'S') {
 				devices.addDevice({
@@ -253,7 +271,7 @@
 		showDeleteConfirm = false;
 		
 		try {
-			const result = await deleteDevice($config.apiKey, editDeviceId, $config.selectedEnvironment);
+			const result = await deleteDevice($config.apiKey, editDeviceId, $config.selectedEnvironment, $config.customBaseUrl);
 			
 			if (result.xResult === 'S') {
 				devices.removeDevice(editDeviceId);

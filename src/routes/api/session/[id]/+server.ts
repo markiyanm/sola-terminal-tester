@@ -1,9 +1,20 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
-type Environment = 'prod' | 'test';
+type Environment = 'prod' | 'test' | 'custom';
 
-function getBaseUrl(environment: Environment): string {
+function getBaseUrl(environment: Environment, customBaseUrl?: string): string {
+	if (environment === 'custom' && customBaseUrl) {
+		// Ensure the custom URL has https:// prefix and /v1 suffix
+		let url = customBaseUrl.trim();
+		if (!url.startsWith('https://') && !url.startsWith('http://')) {
+			url = 'https://' + url;
+		}
+		if (!url.endsWith('/v1')) {
+			url = url + '/v1';
+		}
+		return url;
+	}
 	return environment === 'test' 
 		? 'https://devdevice.cardknox.com/v1'
 		: 'https://device.cardknox.com/v1';
@@ -12,7 +23,8 @@ function getBaseUrl(environment: Environment): string {
 export const GET: RequestHandler = async ({ params, url }) => {
 	const sessionId = params.id;
 	const environment = (url.searchParams.get('environment') || 'prod') as Environment;
-	const baseUrl = getBaseUrl(environment);
+	const customBaseUrl = url.searchParams.get('customBaseUrl') || undefined;
+	const baseUrl = getBaseUrl(environment, customBaseUrl);
 	const endpoint = `${baseUrl}/Session/${sessionId}`;
 	const requestHeaders = { 'Authorization': '[REDACTED]' };
 	
@@ -76,8 +88,8 @@ export const DELETE: RequestHandler = async ({ params, request }) => {
 	let endpoint = '';
 	
 	try {
-		const { apiKey, deviceId, environment = 'prod' } = await request.json();
-		const baseUrl = getBaseUrl(environment);
+		const { apiKey, deviceId, environment = 'prod', customBaseUrl } = await request.json();
+		const baseUrl = getBaseUrl(environment, customBaseUrl);
 		endpoint = `${baseUrl}/Session/cancel`;
 
 		if (!apiKey) {

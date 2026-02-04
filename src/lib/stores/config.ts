@@ -16,13 +16,14 @@ function deobfuscate(str: string): string {
 	}
 }
 
-export type Environment = 'prod' | 'test';
+export type Environment = 'prod' | 'test' | 'custom';
 
 export interface ApiKeyEntry {
 	id: string;
 	name: string;
 	key: string;
 	environment: Environment;
+	customBaseUrl?: string; // Custom base URL for 'custom' environment
 }
 
 interface Config {
@@ -30,10 +31,11 @@ interface Config {
 	apiKeys: ApiKeyEntry[]; // All saved keys
 	selectedKeyId: string | null;
 	selectedEnvironment: Environment; // Currently selected environment
+	customBaseUrl?: string; // Currently selected custom base URL (when environment is 'custom')
 }
 
 function loadConfig(): Config {
-	if (!browser) return { apiKey: '', apiKeys: [], selectedKeyId: null, selectedEnvironment: 'prod' };
+	if (!browser) return { apiKey: '', apiKeys: [], selectedKeyId: null, selectedEnvironment: 'prod', customBaseUrl: undefined };
 	
 	try {
 		const stored = localStorage.getItem(STORAGE_KEY);
@@ -49,17 +51,19 @@ function loadConfig(): Config {
 						apiKey: legacyKey,
 						apiKeys: [{ id, name: 'Default', key: legacyKey, environment: 'prod' }],
 						selectedKeyId: id,
-						selectedEnvironment: 'prod'
+						selectedEnvironment: 'prod',
+						customBaseUrl: undefined
 					};
 				}
 			}
 			
 			// New multi-key format with environment support
-			const apiKeys: ApiKeyEntry[] = (parsed.apiKeys || []).map((entry: { id: string; name: string; key: string; environment?: Environment }) => ({
+			const apiKeys: ApiKeyEntry[] = (parsed.apiKeys || []).map((entry: { id: string; name: string; key: string; environment?: Environment; customBaseUrl?: string }) => ({
 				id: entry.id,
 				name: entry.name,
 				key: deobfuscate(entry.key || ''),
-				environment: entry.environment || 'prod' // Default to prod for migrated keys
+				environment: entry.environment || 'prod', // Default to prod for migrated keys
+				customBaseUrl: entry.customBaseUrl
 			}));
 			
 			const selectedKeyId = parsed.selectedKeyId || null;
@@ -69,14 +73,15 @@ function loadConfig(): Config {
 				apiKey: selectedEntry?.key || '',
 				apiKeys,
 				selectedKeyId,
-				selectedEnvironment: selectedEntry?.environment || 'prod'
+				selectedEnvironment: selectedEntry?.environment || 'prod',
+				customBaseUrl: selectedEntry?.customBaseUrl
 			};
 		}
 	} catch (e) {
 		console.error('Failed to load config:', e);
 	}
 	
-	return { apiKey: '', apiKeys: [], selectedKeyId: null, selectedEnvironment: 'prod' };
+	return { apiKey: '', apiKeys: [], selectedKeyId: null, selectedEnvironment: 'prod', customBaseUrl: undefined };
 }
 
 function saveConfig(config: Config) {
@@ -88,7 +93,8 @@ function saveConfig(config: Config) {
 				id: entry.id,
 				name: entry.name,
 				key: obfuscate(entry.key),
-				environment: entry.environment
+				environment: entry.environment,
+				customBaseUrl: entry.customBaseUrl
 			})),
 			selectedKeyId: config.selectedKeyId
 		}));
@@ -102,26 +108,27 @@ function createConfigStore() {
 
 	return {
 		subscribe,
-		addApiKey: (name: string, key: string, environment: Environment = 'prod') => {
+		addApiKey: (name: string, key: string, environment: Environment = 'prod', customBaseUrl?: string) => {
 			update(config => {
 				const id = crypto.randomUUID();
-				const newEntry: ApiKeyEntry = { id, name, key, environment };
+				const newEntry: ApiKeyEntry = { id, name, key, environment, customBaseUrl };
 				const newKeys = [...config.apiKeys, newEntry];
 				const newConfig = {
 					...config,
 					apiKeys: newKeys,
 					selectedKeyId: id,
 					apiKey: key,
-					selectedEnvironment: environment
+					selectedEnvironment: environment,
+					customBaseUrl: customBaseUrl
 				};
 				saveConfig(newConfig);
 				return newConfig;
 			});
 		},
-		updateApiKey: (id: string, name: string, key: string, environment: Environment) => {
+		updateApiKey: (id: string, name: string, key: string, environment: Environment, customBaseUrl?: string) => {
 			update(config => {
 				const newKeys = config.apiKeys.map(entry => 
-					entry.id === id ? { ...entry, name, key, environment } : entry
+					entry.id === id ? { ...entry, name, key, environment, customBaseUrl } : entry
 				);
 				const isSelected = config.selectedKeyId === id;
 				const updatedEntry = newKeys.find(e => e.id === id);
@@ -129,7 +136,8 @@ function createConfigStore() {
 					...config,
 					apiKeys: newKeys,
 					apiKey: isSelected ? key : config.apiKey,
-					selectedEnvironment: isSelected && updatedEntry ? updatedEntry.environment : config.selectedEnvironment
+					selectedEnvironment: isSelected && updatedEntry ? updatedEntry.environment : config.selectedEnvironment,
+					customBaseUrl: isSelected && updatedEntry ? updatedEntry.customBaseUrl : config.customBaseUrl
 				};
 				saveConfig(newConfig);
 				return newConfig;
@@ -141,12 +149,14 @@ function createConfigStore() {
 				let newSelectedId = config.selectedKeyId;
 				let newApiKey = config.apiKey;
 				let newEnvironment = config.selectedEnvironment;
+				let newCustomBaseUrl = config.customBaseUrl;
 				
 				if (config.selectedKeyId === id) {
 					// Select the first remaining key, or null if none left
 					newSelectedId = newKeys.length > 0 ? newKeys[0].id : null;
 					newApiKey = newKeys.length > 0 ? newKeys[0].key : '';
 					newEnvironment = newKeys.length > 0 ? newKeys[0].environment : 'prod';
+					newCustomBaseUrl = newKeys.length > 0 ? newKeys[0].customBaseUrl : undefined;
 				}
 				
 				const newConfig = {
@@ -154,7 +164,8 @@ function createConfigStore() {
 					apiKeys: newKeys,
 					selectedKeyId: newSelectedId,
 					apiKey: newApiKey,
-					selectedEnvironment: newEnvironment
+					selectedEnvironment: newEnvironment,
+					customBaseUrl: newCustomBaseUrl
 				};
 				saveConfig(newConfig);
 				return newConfig;
@@ -169,7 +180,8 @@ function createConfigStore() {
 					...config,
 					selectedKeyId: id,
 					apiKey: entry.key,
-					selectedEnvironment: entry.environment
+					selectedEnvironment: entry.environment,
+					customBaseUrl: entry.customBaseUrl
 				};
 				saveConfig(newConfig);
 				return newConfig;
@@ -203,7 +215,7 @@ function createConfigStore() {
 		},
 		clearApiKey: () => {
 			update(config => {
-				const newConfig: Config = { ...config, apiKey: '', apiKeys: [], selectedKeyId: null, selectedEnvironment: 'prod' };
+				const newConfig: Config = { ...config, apiKey: '', apiKeys: [], selectedKeyId: null, selectedEnvironment: 'prod', customBaseUrl: undefined };
 				saveConfig(newConfig);
 				return newConfig;
 			});

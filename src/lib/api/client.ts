@@ -7,12 +7,13 @@ export async function registerDevice(
 	serialNumber: string,
 	deviceMake: string,
 	friendlyName: string,
-	environment: Environment = 'prod'
+	environment: Environment = 'prod',
+	customBaseUrl?: string
 ): Promise<{ xDeviceId?: string; xRefnum?: string; xResult?: string; xError?: string }> {
 	const response = await fetch('/api/device', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ apiKey, serialNumber, deviceMake, friendlyName, environment })
+		body: JSON.stringify({ apiKey, serialNumber, deviceMake, friendlyName, environment, customBaseUrl })
 	});
 	return response.json();
 }
@@ -23,19 +24,33 @@ export interface ListDevicesResponse {
 	xResult?: string;
 	xError?: string;
 	error?: string;
+	_debug?: {
+		endpoint?: string;
+		responseStatus?: number;
+		error?: string;
+	};
 }
 
-export async function listDevices(apiKey: string, environment: Environment = 'prod'): Promise<ListDevicesResponse> {
-	const response = await fetch(`/api/device?apiKey=${encodeURIComponent(apiKey)}&environment=${environment}`);
+export async function listDevices(apiKey: string, environment: Environment = 'prod', customBaseUrl?: string): Promise<ListDevicesResponse> {
+	let url = `/api/device?apiKey=${encodeURIComponent(apiKey)}&environment=${environment}`;
+	if (customBaseUrl) {
+		url += `&customBaseUrl=${encodeURIComponent(customBaseUrl)}`;
+	}
+	const response = await fetch(url);
 	return response.json();
 }
 
 export async function getDeviceStatus(
 	apiKey: string,
 	deviceId: string,
-	environment: Environment = 'prod'
+	environment: Environment = 'prod',
+	customBaseUrl?: string
 ): Promise<{ xDeviceId?: string; xDeviceStatus?: string; xError?: string }> {
-	const response = await fetch(`/api/device/${encodeURIComponent(deviceId)}?apiKey=${encodeURIComponent(apiKey)}&environment=${environment}`);
+	let url = `/api/device/${encodeURIComponent(deviceId)}?apiKey=${encodeURIComponent(apiKey)}&environment=${environment}`;
+	if (customBaseUrl) {
+		url += `&customBaseUrl=${encodeURIComponent(customBaseUrl)}`;
+	}
+	const response = await fetch(url);
 	return response.json();
 }
 
@@ -43,12 +58,13 @@ export async function updateDevice(
 	apiKey: string,
 	deviceId: string,
 	friendlyName: string,
-	environment: Environment = 'prod'
+	environment: Environment = 'prod',
+	customBaseUrl?: string
 ): Promise<{ xResult?: string; xError?: string; error?: string }> {
 	const response = await fetch(`/api/device/${encodeURIComponent(deviceId)}`, {
 		method: 'PUT',
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ apiKey, friendlyName, environment })
+		body: JSON.stringify({ apiKey, friendlyName, environment, customBaseUrl })
 	});
 	return response.json();
 }
@@ -56,12 +72,13 @@ export async function updateDevice(
 export async function deleteDevice(
 	apiKey: string,
 	deviceId: string,
-	environment: Environment = 'prod'
+	environment: Environment = 'prod',
+	customBaseUrl?: string
 ): Promise<{ xResult?: string; xError?: string; error?: string }> {
 	const response = await fetch(`/api/device/${encodeURIComponent(deviceId)}`, {
 		method: 'DELETE',
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ apiKey, environment })
+		body: JSON.stringify({ apiKey, environment, customBaseUrl })
 	});
 	return response.json();
 }
@@ -77,6 +94,7 @@ export interface InitiateSessionParams {
 	tip?: string;
 	externalRequestId?: string;
 	environment?: Environment;
+	customBaseUrl?: string;
 }
 
 export interface SessionInitiateResponse {
@@ -108,9 +126,14 @@ export interface SessionStatusResponse {
 export async function getSessionStatus(
 	apiKey: string,
 	sessionId: string,
-	environment: Environment = 'prod'
+	environment: Environment = 'prod',
+	customBaseUrl?: string
 ): Promise<SessionStatusResponse> {
-	const response = await fetch(`/api/session/${encodeURIComponent(sessionId)}?apiKey=${encodeURIComponent(apiKey)}&environment=${environment}`);
+	let url = `/api/session/${encodeURIComponent(sessionId)}?apiKey=${encodeURIComponent(apiKey)}&environment=${environment}`;
+	if (customBaseUrl) {
+		url += `&customBaseUrl=${encodeURIComponent(customBaseUrl)}`;
+	}
+	const response = await fetch(url);
 	return response.json();
 }
 
@@ -118,12 +141,13 @@ export async function cancelSession(
 	apiKey: string,
 	sessionId: string,
 	deviceId: string,
-	environment: Environment = 'prod'
+	environment: Environment = 'prod',
+	customBaseUrl?: string
 ): Promise<{ xResult?: string; xError?: string }> {
 	const response = await fetch(`/api/session/${encodeURIComponent(sessionId)}`, {
 		method: 'DELETE',
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ apiKey, deviceId, environment })
+		body: JSON.stringify({ apiKey, deviceId, environment, customBaseUrl })
 	});
 	return response.json();
 }

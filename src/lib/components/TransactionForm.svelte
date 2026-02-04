@@ -89,7 +89,8 @@
 				enableTipPrompt,
 				invoice: invoice || undefined,
 				tip: tip || undefined,
-				environment: $config.selectedEnvironment
+				environment: $config.selectedEnvironment,
+				customBaseUrl: $config.customBaseUrl
 			});
 			
 			const debug = extractDebugInfo(result);
@@ -122,7 +123,7 @@
 		error = null;
 		
 		try {
-			const result = await cancelSession($config.apiKey, sessionId, deviceId, $config.selectedEnvironment);
+			const result = await cancelSession($config.apiKey, sessionId, deviceId, $config.selectedEnvironment, $config.customBaseUrl);
 			const debug = extractDebugInfo(result);
 			if (debug) {
 				session.setSessionStatusDebug(debug);

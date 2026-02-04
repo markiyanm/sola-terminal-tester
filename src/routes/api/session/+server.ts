@@ -1,9 +1,20 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
-type Environment = 'prod' | 'test';
+type Environment = 'prod' | 'test' | 'custom';
 
-function getBaseUrl(environment: Environment): string {
+function getBaseUrl(environment: Environment, customBaseUrl?: string): string {
+	if (environment === 'custom' && customBaseUrl) {
+		// Ensure the custom URL has https:// prefix and /v1 suffix
+		let url = customBaseUrl.trim();
+		if (!url.startsWith('https://') && !url.startsWith('http://')) {
+			url = 'https://' + url;
+		}
+		if (!url.endsWith('/v1')) {
+			url = url + '/v1';
+		}
+		return url;
+	}
 	return environment === 'test' 
 		? 'https://devdevice.cardknox.com/v1'
 		: 'https://device.cardknox.com/v1';
@@ -24,10 +35,11 @@ export const POST: RequestHandler = async ({ request }) => {
 			invoice, 
 			tip,
 			externalRequestId,
-			environment = 'prod'
+			environment = 'prod',
+			customBaseUrl
 		} = await request.json();
 		
-		const baseUrl = getBaseUrl(environment);
+		const baseUrl = getBaseUrl(environment, customBaseUrl);
 		endpoint = `${baseUrl}/Session/initiate`;
 
 		if (!apiKey) {
