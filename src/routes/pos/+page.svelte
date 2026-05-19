@@ -77,6 +77,8 @@ let discountError = $state<string | null>(null);
 let appliedDiscountMode = $state<DiscountMode>('percent');
 let appliedDiscountValue = $state(0);
 let paymentMethod = $state<PaymentMethod>('credit-card');
+let addedProductId = $state<string | null>(null);
+let lastApprovedAmount = $state('0.00');
 	let terminalError = $state<string | null>(null);
 	let checkoutError = $state<string | null>(null);
 	let isRefreshingDevices = $state(false);
@@ -211,6 +213,7 @@ let discountPreview = $derived.by(() => {
 
 	function addToCart(product: Product) {
 		checkoutError = null;
+		animateProductAdded(product.id);
 		const existing = cart.find(line => line.productId === product.id);
 
 		if (existing) {
@@ -232,6 +235,18 @@ let discountPreview = $derived.by(() => {
 				description: product.description
 			}
 		];
+	}
+
+	function animateProductAdded(productId: string) {
+		addedProductId = null;
+		window.requestAnimationFrame(() => {
+			addedProductId = productId;
+			window.setTimeout(() => {
+				if (addedProductId === productId) {
+					addedProductId = null;
+				}
+			}, 520);
+		});
 	}
 
 	function updateLineQuantity(productId: string, nextQuantity: number) {
@@ -421,6 +436,10 @@ let discountPreview = $derived.by(() => {
 		}
 	}
 
+	function removeCartLine(productId: string) {
+		cart = cart.filter(line => line.productId !== productId);
+	}
+
 	function extractDebugInfo(result: Record<string, unknown>): DebugInfo | null {
 		if (result._debug && typeof result._debug === 'object') {
 			return result._debug as DebugInfo;
@@ -497,6 +516,7 @@ let discountPreview = $derived.by(() => {
 				checkoutError = message;
 				v2session.setError(message, undefined, result.xError as string);
 			} else {
+				lastApprovedAmount = saleAmount;
 				v2session.setCompleted({
 					refnum: result.xRefnum as string,
 					result: result.xResult as string,
@@ -517,6 +537,8 @@ let discountPreview = $derived.by(() => {
 					remainingBalance: result.xRemainingBalance as string,
 					responseData: cleanResponse
 				});
+				cart = [];
+				appliedDiscountValue = 0;
 			}
 		} catch (e) {
 			if (requestVersion !== saleRequestVersion) return;
@@ -597,9 +619,10 @@ let discountPreview = $derived.by(() => {
 	<title>Sola Terminal Tester - POS Demo</title>
 	<meta name="description" content="Square-style POS demo using Sola Terminal V2 synchronous sale flow" />
 	<meta name="color-scheme" content="light" />
+	<link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
 </svelte:head>
 
-<div class="pos-page min-h-screen overflow-x-hidden text-[#30333a]">
+<div class="pos-page min-h-screen overflow-x-hidden text-[#30333a]" data-theme="corporate">
 	<div class="pos-shell flex h-screen w-full flex-col overflow-hidden shadow-2xl">
 		<header class="flex h-10 items-center justify-between bg-black px-3 text-xs font-semibold text-white">
 			<div class="w-48">{statusDateTime}</div>
@@ -607,7 +630,7 @@ let discountPreview = $derived.by(() => {
 				<button
 					type="button"
 					onclick={() => showReaderMenu = !showReaderMenu}
-					class="inline-flex max-w-[360px] items-center justify-center gap-2 rounded px-3 py-1 text-white hover:bg-white/10"
+					class="btn btn-ghost btn-xs inline-flex max-w-[360px] items-center justify-center gap-2 border-0 px-3 text-white hover:bg-white/10"
 				>
 					{#if $selectedDevice}
 						<span class="reader-status-dot {$selectedDevice.xDeviceStatus === 'CONNECTED' ? 'online' : 'offline'}"></span>
@@ -625,11 +648,11 @@ let discountPreview = $derived.by(() => {
 				</button>
 
 				{#if showReaderMenu}
-					<div class="pos-reader-menu absolute left-1/2 top-full mt-1 w-80 -translate-x-1/2 overflow-hidden rounded-sm border border-[#cfd4da] bg-white text-left text-[#30333a] shadow-xl">
+					<div class="pos-reader-menu menu dropdown-content absolute left-1/2 top-full mt-1 w-80 -translate-x-1/2 overflow-hidden rounded-box border border-base-300 bg-base-100 p-0 text-left text-base-content shadow-xl">
 						<button
 							type="button"
 							onclick={() => selectTerminal('')}
-							class="block w-full px-3 py-2 text-left text-sm hover:bg-[#eef5ff]"
+							class="btn btn-ghost justify-start rounded-none px-3 text-left text-sm"
 						>
 							Select reader
 						</button>
@@ -637,7 +660,7 @@ let discountPreview = $derived.by(() => {
 							<button
 								type="button"
 								onclick={() => selectTerminal(device.xDeviceId)}
-								class="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-[#eef5ff]"
+								class="btn btn-ghost flex w-full items-center justify-between gap-3 rounded-none px-3 text-left text-sm"
 							>
 								<span class="min-w-0 truncate font-semibold">
 									{formatDeviceName(device)}
@@ -656,7 +679,7 @@ let discountPreview = $derived.by(() => {
 				<button
 					type="button"
 					onclick={() => openProductEditor()}
-					class="pos-top-iconbtn"
+					class="pos-top-iconbtn btn btn-ghost btn-circle btn-sm"
 					title="Add item"
 					aria-label="Add item"
 				>
@@ -676,11 +699,12 @@ let discountPreview = $derived.by(() => {
 			<section class="pos-left flex min-w-0 flex-1 flex-col border-r border-[#d6d9dd]">
 				<div class="pos-grid grid flex-1 overflow-y-auto p-4">
 					{#each products as product (product.id)}
-						<div class="pos-tile group rounded-sm bg-white shadow-[0_1px_3px_rgba(0,0,0,0.22)]">
+						<div class="pos-tile card group rounded-box bg-base-100 shadow-md">
 							<div class="pos-tile-inner">
 								<button
 									onclick={() => addToCart(product)}
-									class="flex h-full w-full flex-col overflow-hidden rounded-sm bg-white text-left"
+									class="product-card-button flex h-full w-full flex-col overflow-hidden rounded-box bg-base-100 text-left"
+									class:adding-to-cart={addedProductId === product.id}
 								>
 									<div class="food-photo {product.photoClass}">
 										<div class="plate"></div>
@@ -688,10 +712,11 @@ let discountPreview = $derived.by(() => {
 									<div class="product-tile-name">
 										<span>{product.name}</span>
 									</div>
+									<span class="add-to-cart-pulse" aria-hidden="true">+1</span>
 								</button>
 								<button
 									onclick={() => openProductEditor(product)}
-									class="pos-tile-edit"
+									class="pos-tile-edit btn btn-xs btn-ghost"
 									title="Edit product"
 								>
 									Edit
@@ -720,12 +745,12 @@ let discountPreview = $derived.by(() => {
 
 				<div class="pos-cart-scroll min-h-0 flex-1 overflow-y-auto">
 					{#if terminalError}
-						<div class="cart-banner cart-banner-error">{terminalError}</div>
+						<div class="cart-banner cart-banner-error alert alert-error">{terminalError}</div>
 					{/if}
 
 					{#if $selectedDevice && !selectedDeviceOnline}
-						<label class="cart-banner cart-banner-warn">
-							<input type="checkbox" bind:checked={bypassStatusCheck} />
+						<label class="cart-banner cart-banner-warn alert alert-warning">
+							<input type="checkbox" bind:checked={bypassStatusCheck} class="checkbox checkbox-warning checkbox-sm" />
 							<span>Try selected reader anyway</span>
 						</label>
 					{/if}
@@ -741,7 +766,7 @@ let discountPreview = $derived.by(() => {
 										title="Add another"
 									>
 										{#if line.quantity > 1}
-											<span class="cart-qty-badge">{line.quantity}</span>
+											<span class="cart-qty-badge badge badge-primary badge-sm">{line.quantity}</span>
 										{/if}
 										<span class="cart-name-text">{line.name}</span>
 									</button>
@@ -753,10 +778,10 @@ let discountPreview = $derived.by(() => {
 									<span class="cart-line-price">${formatMoney(line.price * line.quantity)}</span>
 									<button
 										type="button"
-										onclick={() => updateLineQuantity(line.productId, line.quantity - 1)}
-										class="cart-line-remove"
-										title={line.quantity > 1 ? 'Remove one' : 'Remove item'}
-										aria-label={line.quantity > 1 ? 'Remove one' : 'Remove item'}
+										onclick={() => removeCartLine(line.productId)}
+										class="cart-line-remove btn btn-ghost btn-circle btn-xs"
+										title="Delete item"
+										aria-label="Delete item"
 									>
 										<svg viewBox="0 0 16 16" aria-hidden="true">
 											<path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
@@ -795,13 +820,13 @@ let discountPreview = $derived.by(() => {
 					{/if}
 
 					{#if checkoutError}
-						<div class="cart-banner cart-banner-error cart-banner-bottom">{checkoutError}</div>
+						<div class="cart-banner cart-banner-error cart-banner-bottom alert alert-error">{checkoutError}</div>
 					{:else if $v2session.status === 'cancelled'}
-						<div class="cart-banner cart-banner-warn cart-banner-bottom">
+						<div class="cart-banner cart-banner-warn cart-banner-bottom alert alert-warning">
 							Transaction cancelled
 						</div>
 					{:else if !$config.apiKey}
-						<div class="cart-banner cart-banner-muted cart-banner-bottom">
+						<div class="cart-banner cart-banner-muted cart-banner-bottom alert">
 							Configure an API key before charging the sale.
 						</div>
 					{/if}
@@ -809,7 +834,7 @@ let discountPreview = $derived.by(() => {
 
 				<div class="checkout-footer border-t border-[#e1e3e6] p-4">
 					<div class="checkout-controls">
-						<button type="button" class="checkout-discount-button" onclick={openDiscountEditor}>
+						<button type="button" class="checkout-discount-button btn btn-outline justify-start" onclick={openDiscountEditor}>
 							<span class="checkout-discount-icon">%</span>
 							<span>
 								Discounts
@@ -819,7 +844,7 @@ let discountPreview = $derived.by(() => {
 							</span>
 						</button>
 
-						<select class="payment-method-select" bind:value={paymentMethod}>
+						<select class="payment-method-select select select-bordered" bind:value={paymentMethod}>
 							<option value="credit-card">Credit Card</option>
 							<option value="gift-card">Gift Card</option>
 						</select>
@@ -828,7 +853,7 @@ let discountPreview = $derived.by(() => {
 					<button
 						onclick={isCheckingOut ? cancelSale : sendSale}
 						disabled={isCheckingOut ? isCancellingSale : !canCheckout}
-						class="sale-action-button h-16 w-full text-[20px] font-semibold text-white transition-colors disabled:bg-[#b9c1ca] {isCheckingOut ? 'cancel-mode' : 'charge-mode'}"
+						class="sale-action-button btn h-16 w-full text-[20px] font-semibold text-white transition-colors disabled:bg-[#b9c1ca] {isCheckingOut ? 'btn-error cancel-mode' : 'btn-primary charge-mode'}"
 					>
 						{#if isCheckingOut}
 							{isCancellingSale ? 'Cancelling...' : 'Cancel'}
@@ -845,21 +870,21 @@ let discountPreview = $derived.by(() => {
 
 {#if showProductEditor}
 	<div
-		class="product-editor-backdrop"
+		class="product-editor-backdrop modal modal-open"
 		role="dialog"
 		aria-modal="true"
 		tabindex="-1"
 		onclick={(e) => { if (e.target === e.currentTarget) closeProductEditor(); }}
 		onkeydown={(e) => { if (e.key === 'Escape') closeProductEditor(); }}
 	>
-		<div class="product-editor-modal">
+		<div class="product-editor-modal modal-box">
 			<div class="mb-5 flex items-center justify-between">
 				<h2 class="text-xl font-semibold text-[#30333a]">{editingProductId ? 'Edit item' : 'Add item'}</h2>
-				<button onclick={closeProductEditor} class="text-3xl leading-none text-[#8d939b]" title="Close">×</button>
+				<button onclick={closeProductEditor} class="btn btn-ghost btn-circle btn-sm text-xl" title="Close">×</button>
 			</div>
 
 			{#if productEditorError}
-				<div class="mb-4 border border-[#f2b2b2] bg-[#fff4f4] p-3 text-sm text-[#b42323]">
+				<div class="alert alert-error mb-4 text-sm">
 					{productEditorError}
 				</div>
 			{/if}
@@ -867,26 +892,26 @@ let discountPreview = $derived.by(() => {
 			<div class="space-y-4">
 				<div>
 					<label for="product-name" class="mb-1 block text-sm font-semibold text-[#4a4f57]">Name</label>
-					<input id="product-name" bind:value={productForm.name} class="w-full border border-[#cfd4da] px-3 py-2" />
+					<input id="product-name" bind:value={productForm.name} class="input input-bordered w-full" />
 				</div>
 				<div>
 					<label for="product-price" class="mb-1 block text-sm font-semibold text-[#4a4f57]">Price</label>
-					<input id="product-price" type="number" min="0.01" step="0.01" bind:value={productForm.price} class="w-full border border-[#cfd4da] px-3 py-2" />
+					<input id="product-price" type="number" min="0.01" step="0.01" bind:value={productForm.price} class="input input-bordered w-full" />
 				</div>
 				<div>
 					<label for="product-description" class="mb-1 block text-sm font-semibold text-[#4a4f57]">Modifier text</label>
-					<input id="product-description" bind:value={productForm.description} class="w-full border border-[#cfd4da] px-3 py-2" />
+					<input id="product-description" bind:value={productForm.description} class="input input-bordered w-full" />
 				</div>
 			</div>
 
 			<div class="mt-6 flex gap-3">
-				<button onclick={saveProduct} class="flex-1 bg-[#0074f8] px-4 py-3 font-semibold text-white">Save</button>
-				<button onclick={closeProductEditor} class="border border-[#cfd4da] px-4 py-3 font-semibold text-[#4a4f57]">Cancel</button>
+				<button onclick={saveProduct} class="btn btn-primary flex-1">Save</button>
+				<button onclick={closeProductEditor} class="btn btn-outline">Cancel</button>
 			</div>
 
 			{#if editingProductId}
 				<div class="mt-4 border-t border-[#e1e3e6] pt-4 text-center">
-					<button onclick={deleteEditingProduct} class="text-sm font-semibold text-[#d23b3b]">Delete item</button>
+					<button onclick={deleteEditingProduct} class="btn btn-error btn-outline btn-sm">Delete item</button>
 				</div>
 			{/if}
 		</div>
@@ -895,15 +920,15 @@ let discountPreview = $derived.by(() => {
 
 {#if $v2session.status === 'completed'}
 	<div
-		class="approval-backdrop"
+		class="approval-backdrop modal modal-open"
 		role="dialog"
 		aria-modal="true"
 		tabindex="-1"
 		onclick={(e) => { if (e.target === e.currentTarget) closeApprovalModal(); }}
 		onkeydown={(e) => { if (e.key === 'Escape') closeApprovalModal(); }}
 	>
-		<div class="approval-modal">
-			<button type="button" class="approval-close" onclick={closeApprovalModal} title="Close">×</button>
+		<div class="approval-modal modal-box">
+			<button type="button" class="approval-close btn btn-ghost btn-circle btn-sm" onclick={closeApprovalModal} title="Close">×</button>
 			<div class="approval-check-wrap">
 				<div class="approval-check-glow"></div>
 				<svg class="approval-check" viewBox="0 0 96 96" aria-hidden="true">
@@ -919,35 +944,35 @@ let discountPreview = $derived.by(() => {
 			<div class="approval-details">
 				<div>
 					<span>Amount</span>
-					<strong>${formatMoney(total)}</strong>
+					<strong>${lastApprovedAmount}</strong>
 				</div>
 				<div>
 					<span>Method</span>
 					<strong>{paymentMethod === 'gift-card' ? 'Gift Card' : 'Credit Card'}</strong>
 				</div>
 			</div>
-			<button type="button" class="approval-primary" onclick={startNewSale}>Start new sale</button>
+			<button type="button" class="approval-primary btn btn-success" onclick={startNewSale}>Start new sale</button>
 		</div>
 	</div>
 {/if}
 
 {#if showDiscountEditor}
 	<div
-		class="product-editor-backdrop"
+		class="product-editor-backdrop modal modal-open"
 		role="dialog"
 		aria-modal="true"
 		tabindex="-1"
 		onclick={(e) => { if (e.target === e.currentTarget) closeDiscountEditor(); }}
 		onkeydown={(e) => { if (e.key === 'Escape') closeDiscountEditor(); }}
 	>
-		<div class="product-editor-modal discount-editor-modal">
+		<div class="product-editor-modal discount-editor-modal modal-box">
 			<div class="mb-5 flex items-center justify-between">
 				<h2 class="text-xl font-semibold text-[#30333a]">Apply discount</h2>
-				<button onclick={closeDiscountEditor} class="text-3xl leading-none text-[#8d939b]" title="Close">×</button>
+				<button onclick={closeDiscountEditor} class="btn btn-ghost btn-circle btn-sm text-xl" title="Close">×</button>
 			</div>
 
 			{#if discountError}
-				<div class="mb-4 border border-[#f2b2b2] bg-[#fff4f4] p-3 text-sm text-[#b42323]">
+				<div class="alert alert-error mb-4 text-sm">
 					{discountError}
 				</div>
 			{/if}
@@ -983,6 +1008,7 @@ let discountPreview = $derived.by(() => {
 						step={discountMode === 'percent' ? '1' : '0.01'}
 						bind:value={discountInput}
 						placeholder={discountMode === 'percent' ? '10' : '5.00'}
+						class="input"
 					/>
 				</div>
 			</div>
@@ -993,17 +1019,17 @@ let discountPreview = $derived.by(() => {
 			</div>
 
 			<div class="discount-actions">
-				<button type="button" onclick={applyDiscount} class="discount-save-button">
+				<button type="button" onclick={applyDiscount} class="discount-save-button btn btn-primary">
 					Save discount
 				</button>
-				<button type="button" onclick={closeDiscountEditor} class="discount-cancel-button">
+				<button type="button" onclick={closeDiscountEditor} class="discount-cancel-button btn btn-outline">
 					Cancel
 				</button>
 			</div>
 
 			{#if appliedDiscountValue > 0}
 				<div class="mt-4 border-t border-[#e1e3e6] pt-4 text-center">
-					<button onclick={clearDiscount} class="text-sm font-semibold text-[#d23b3b]">Remove discount</button>
+					<button onclick={clearDiscount} class="btn btn-error btn-outline btn-sm">Remove discount</button>
 				</div>
 			{/if}
 		</div>
@@ -1553,7 +1579,7 @@ let discountPreview = $derived.by(() => {
 	}
 
 	.pos-grid {
-		--pos-tile-size: 280px;
+		--pos-tile-size: 252px;
 		display: grid;
 		flex: 1 1 auto;
 		grid-template-columns: repeat(auto-fill, var(--pos-tile-size));
@@ -1588,6 +1614,7 @@ let discountPreview = $derived.by(() => {
 
 	.pos-grid > .pos-tile .pos-tile-inner > button:first-child {
 		display: flex;
+		position: relative;
 		width: 100%;
 		height: 100%;
 		flex: 1 1 auto;
@@ -1595,6 +1622,62 @@ let discountPreview = $derived.by(() => {
 		padding: 0;
 		background: #fff;
 		color: #3c4047;
+	}
+
+	.product-card-button {
+		transform: translateX(0) scale(1);
+		transform-origin: center center;
+		transition: box-shadow 0.16s ease, transform 0.16s ease;
+	}
+
+	.product-card-button.adding-to-cart {
+		animation: product-added-nudge 0.52s cubic-bezier(0.22, 1, 0.36, 1);
+		box-shadow: 0 10px 28px rgba(0, 116, 248, 0.22);
+	}
+
+	.add-to-cart-pulse {
+		position: absolute;
+		right: 16px;
+		top: 50%;
+		z-index: 4;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 40px;
+		height: 40px;
+		border-radius: 999px;
+		background: #0074f8;
+		color: #ffffff;
+		font-size: 15px;
+		font-weight: 900;
+		opacity: 0;
+		pointer-events: none;
+		transform: translate(0, -50%) scale(0.65);
+		box-shadow: 0 10px 24px rgba(0, 116, 248, 0.28);
+	}
+
+	.product-card-button.adding-to-cart .add-to-cart-pulse {
+		animation: add-pulse-fly 0.52s cubic-bezier(0.22, 1, 0.36, 1);
+	}
+
+	@keyframes product-added-nudge {
+		0% { transform: translateX(0) scale(1); }
+		35% { transform: translateX(8px) scale(0.985); }
+		100% { transform: translateX(0) scale(1); }
+	}
+
+	@keyframes add-pulse-fly {
+		0% {
+			opacity: 0;
+			transform: translate(0, -50%) scale(0.65);
+		}
+		18% {
+			opacity: 1;
+		}
+		100% {
+			opacity: 0;
+			transform: translate(72px, -50%) scale(1);
+		}
 	}
 
 	.pos-tile-edit {
@@ -1630,36 +1713,6 @@ let discountPreview = $derived.by(() => {
 		font-size: 17px;
 		font-weight: 700;
 		line-height: 1.1;
-	}
-
-	.pos-grid > .pos-tile > .pos-tile-inner.flex {
-		width: 100%;
-		height: 100%;
-		padding: 0;
-		color: #3c4047;
-	}
-
-	.pos-grid > .pos-tile > .pos-tile-inner > div:first-child {
-		display: flex;
-		flex: 1 1 66%;
-		min-height: 0;
-		align-items: center;
-		justify-content: center;
-		background: #0f7194;
-		color: #fff;
-		font-size: 46px;
-		font-weight: 300;
-	}
-
-	.pos-grid > .pos-tile > .pos-tile-inner > div:last-child {
-		display: flex;
-		flex: 0 0 34%;
-		align-items: center;
-		justify-content: center;
-		padding: 4px 6px;
-		font-size: 17px;
-		font-weight: 700;
-		color: #3c4047;
 	}
 
 	.pos-side {
@@ -1743,6 +1796,7 @@ let discountPreview = $derived.by(() => {
 		border-radius: 4px;
 		background: #ffffff !important;
 		color: #30333a !important;
+		font-weight: 500;
 		text-align: left;
 	}
 
@@ -1770,7 +1824,7 @@ let discountPreview = $derived.by(() => {
 		min-width: 0;
 		flex-direction: column;
 		font-size: 13px;
-		font-weight: 800;
+		font-weight: 500;
 		line-height: 1.15;
 	}
 
@@ -1787,13 +1841,18 @@ let discountPreview = $derived.by(() => {
 		height: 48px;
 		min-width: 0;
 		width: 100%;
-		padding: 0 34px 0 12px;
+		padding: 0 44px 0 24px;
 		border: 1px solid #cfd4da;
 		border-radius: 4px;
-		background: #ffffff;
+		background-color: #ffffff;
+		background-image: url("data:image/svg+xml,%3Csvg width='14' height='9' viewBox='0 0 14 9' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1.5L7 7.5L13 1.5' fill='none' stroke='%23667085' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+		background-position: right 18px center;
+		background-repeat: no-repeat;
+		background-size: 14px 9px;
 		color: #30333a;
 		font-size: 14px;
-		font-weight: 800;
+		font-weight: 500;
+		line-height: 46px;
 		outline: none;
 	}
 
@@ -2096,7 +2155,7 @@ let discountPreview = $derived.by(() => {
 		display: flex;
 		align-items: center;
 		justify-self: end;
-		gap: 0;
+		gap: 6px;
 		padding-top: 1px;
 		text-align: right;
 	}
@@ -2113,9 +2172,6 @@ let discountPreview = $derived.by(() => {
 
 	.cart-line-remove {
 		display: inline-flex;
-		position: absolute;
-		top: 9px;
-		right: -2px;
 		align-items: center;
 		justify-content: center;
 		width: 24px;
@@ -2125,14 +2181,13 @@ let discountPreview = $derived.by(() => {
 		background: transparent;
 		color: #b8bdc4;
 		cursor: pointer;
-		opacity: 0;
+		opacity: 1;
 		transition: opacity 0.12s ease, color 0.12s ease, background 0.12s ease;
 	}
 
 	.cart-line:hover .cart-line-remove,
 	.cart-line-remove:focus-visible {
 		opacity: 1;
-		transform: translateX(28px);
 	}
 
 	.cart-line-remove:hover {
