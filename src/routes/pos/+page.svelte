@@ -35,7 +35,11 @@ type DiscountMode = 'percent' | 'amount';
 type PaymentMethod = 'credit-card' | 'gift-card';
 
 	const PRODUCTS_STORAGE_KEY = 'sola_terminal_tester_pos_products_square_style';
+	const POS_SIDEBAR_WIDTH_STORAGE_KEY = 'sola_terminal_tester_pos_sidebar_width';
 	const TAX_RATE = 0.095;
+	const DEFAULT_SIDEBAR_WIDTH = 420;
+	const MIN_SIDEBAR_WIDTH = 320;
+	const MIN_PRODUCT_AREA_WIDTH = 340;
 
 	const DEFAULT_PRODUCTS: Product[] = [
 		{ id: 'avocado-toast', name: 'Avocado Toast', price: 5.5, photoClass: 'photo-avocado' },
@@ -85,9 +89,15 @@ let lastApprovedAmount = $state('0.00');
 	let isCancellingSale = $state(false);
 	let bypassStatusCheck = $state(false);
 	let showReaderMenu = $state(false);
+	let showActionsMenu = $state(false);
+	let editMode = $state(false);
 	let lastDeviceRefreshTime = $state<Date | null>(null);
 	let currentTime = $state(new Date());
+	let sidebarWidth = $state(DEFAULT_SIDEBAR_WIDTH);
+	let isResizingSidebar = $state(false);
+	let cartScrollElement = $state<HTMLDivElement | null>(null);
 	let saleRequestVersion = 0;
+	let previousItemCount = 0;
 
 	let subtotal = $derived(cart.reduce((sum, line) => sum + line.price * line.quantity, 0));
 let discount = $derived.by(() => {
@@ -126,11 +136,32 @@ let discountPreview = $derived.by(() => {
 	);
 	let statusDateTime = $derived(formatStatusDateTime(currentTime));
 
+	$effect(() => {
+		const nextItemCount = itemCount;
+
+		if (!browser) {
+			previousItemCount = nextItemCount;
+			return;
+		}
+
+		if (cartScrollElement && nextItemCount > previousItemCount) {
+			window.requestAnimationFrame(() => {
+				cartScrollElement?.scrollTo({
+					top: cartScrollElement.scrollHeight,
+					behavior: 'smooth'
+				});
+			});
+		}
+
+		previousItemCount = nextItemCount;
+	});
+
 	onMount(() => {
 		config.init();
 		devices.init();
 		selectedDeviceId.init();
 		products = loadProducts();
+		sidebarWidth = loadSidebarWidth();
 
 		currentTime = new Date();
 		const clockInterval = window.setInterval(() => {
@@ -139,8 +170,59 @@ let discountPreview = $derived.by(() => {
 
 		return () => {
 			window.clearInterval(clockInterval);
+			stopSidebarResize();
 		};
 	});
+
+	function clamp(value: number, min: number, max: number): number {
+		return Math.max(min, Math.min(max, value));
+	}
+
+	function getMaxSidebarWidth(): number {
+		if (!browser) return DEFAULT_SIDEBAR_WIDTH;
+		return Math.max(MIN_SIDEBAR_WIDTH, window.innerWidth - MIN_PRODUCT_AREA_WIDTH);
+	}
+
+	function loadSidebarWidth(): number {
+		if (!browser) return DEFAULT_SIDEBAR_WIDTH;
+
+		const stored = Number(localStorage.getItem(POS_SIDEBAR_WIDTH_STORAGE_KEY));
+		if (!Number.isFinite(stored)) return DEFAULT_SIDEBAR_WIDTH;
+
+		return clamp(stored, MIN_SIDEBAR_WIDTH, getMaxSidebarWidth());
+	}
+
+	function saveSidebarWidth() {
+		if (!browser) return;
+		localStorage.setItem(POS_SIDEBAR_WIDTH_STORAGE_KEY, String(Math.round(sidebarWidth)));
+	}
+
+	function resizeSidebar(event: PointerEvent) {
+		sidebarWidth = clamp(window.innerWidth - event.clientX, MIN_SIDEBAR_WIDTH, getMaxSidebarWidth());
+	}
+
+	function stopSidebarResize() {
+		if (!browser || !isResizingSidebar) return;
+
+		isResizingSidebar = false;
+		document.body.classList.remove('pos-resizing-sidebar');
+		window.removeEventListener('pointermove', resizeSidebar);
+		window.removeEventListener('pointerup', stopSidebarResize);
+		window.removeEventListener('pointercancel', stopSidebarResize);
+		saveSidebarWidth();
+	}
+
+	function startSidebarResize(event: PointerEvent) {
+		if (!event.isPrimary) return;
+
+		event.preventDefault();
+		isResizingSidebar = true;
+		resizeSidebar(event);
+		document.body.classList.add('pos-resizing-sidebar');
+		window.addEventListener('pointermove', resizeSidebar);
+		window.addEventListener('pointerup', stopSidebarResize);
+		window.addEventListener('pointercancel', stopSidebarResize);
+	}
 
 	function loadProducts(): Product[] {
 		if (!browser) return DEFAULT_PRODUCTS;
@@ -263,6 +345,7 @@ let discountPreview = $derived.by(() => {
 	}
 
 	function openProductEditor(product?: Product) {
+		showActionsMenu = false;
 		editingProductId = product?.id || null;
 		productForm = {
 			name: product?.name || '',
@@ -271,6 +354,11 @@ let discountPreview = $derived.by(() => {
 		};
 		productEditorError = null;
 		showProductEditor = true;
+	}
+
+	function toggleEditMode() {
+		editMode = !editMode;
+		showActionsMenu = false;
 	}
 
 	function closeProductEditor() {
@@ -619,10 +707,11 @@ let discountPreview = $derived.by(() => {
 	<title>Sola Terminal Tester - POS Demo</title>
 	<meta name="description" content="Square-style POS demo using Sola Terminal V2 synchronous sale flow" />
 	<meta name="color-scheme" content="light" />
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
 	<link href="https://cdn.jsdelivr.net/npm/daisyui@5" rel="stylesheet" type="text/css" />
 </svelte:head>
 
-<div class="pos-page min-h-screen overflow-x-hidden text-[#30333a]" data-theme="corporate">
+<div class="pos-page min-h-screen overflow-x-hidden text-[#30333a]" class:edit-mode={editMode} data-theme="corporate">
 	<div class="pos-shell flex h-screen w-full flex-col overflow-hidden shadow-2xl">
 		<header class="flex h-10 items-center justify-between bg-black px-3 text-xs font-semibold text-white">
 			<div class="w-48">{statusDateTime}</div>
@@ -676,19 +765,33 @@ let discountPreview = $derived.by(() => {
 				{/if}
 			</div>
 			<div class="pos-top-actions flex w-48 items-center justify-end gap-2">
-				<button
-					type="button"
-					onclick={() => openProductEditor()}
-					class="pos-top-iconbtn btn btn-ghost btn-circle btn-sm"
-					title="Add item"
-					aria-label="Add item"
-				>
-					<svg viewBox="0 0 16 16" aria-hidden="true">
-						<circle cx="3" cy="8" r="1.4" fill="currentColor" />
-						<circle cx="8" cy="8" r="1.4" fill="currentColor" />
-						<circle cx="13" cy="8" r="1.4" fill="currentColor" />
-					</svg>
-				</button>
+				<div class="pos-actions-menu-wrap">
+					<button
+						type="button"
+						onclick={() => showActionsMenu = !showActionsMenu}
+						class="pos-top-iconbtn btn btn-ghost btn-circle btn-sm"
+						title="POS actions"
+						aria-label="POS actions"
+						aria-expanded={showActionsMenu}
+					>
+						<svg viewBox="0 0 16 16" aria-hidden="true">
+							<circle cx="3" cy="8" r="1.4" fill="currentColor" />
+							<circle cx="8" cy="8" r="1.4" fill="currentColor" />
+							<circle cx="13" cy="8" r="1.4" fill="currentColor" />
+						</svg>
+					</button>
+
+					{#if showActionsMenu}
+						<div class="pos-actions-menu menu dropdown-content rounded-box border border-base-300 bg-base-100 p-1 text-base-content shadow-xl">
+							<button type="button" class="btn btn-ghost justify-start rounded-md text-sm" onclick={() => openProductEditor()}>
+								Add item
+							</button>
+							<button type="button" class="btn btn-ghost justify-start rounded-md text-sm" onclick={toggleEditMode}>
+								{editMode ? 'Exit edit mode' : 'Edit items'}
+							</button>
+						</div>
+					{/if}
+				</div>
 				<div class="pos-api-top flex items-center gap-2">
 					<ApiKeyConfig onKeyChanged={refreshTerminals} />
 				</div>
@@ -699,7 +802,7 @@ let discountPreview = $derived.by(() => {
 			<section class="pos-left flex min-w-0 flex-1 flex-col border-r border-[#d6d9dd]">
 				<div class="pos-grid grid flex-1 overflow-y-auto p-4">
 					{#each products as product (product.id)}
-						<div class="pos-tile card group rounded-box bg-base-100 shadow-md">
+						<div class="pos-tile group rounded-box bg-base-100 shadow-md">
 							<div class="pos-tile-inner">
 								<button
 									onclick={() => addToCart(product)}
@@ -710,17 +813,23 @@ let discountPreview = $derived.by(() => {
 										<div class="plate"></div>
 									</div>
 									<div class="product-tile-name">
-										<span>{product.name}</span>
+										<span class="product-name-text">{product.name}</span>
+										<span class="product-price-text">${formatMoney(product.price)}</span>
+										{#if product.description}
+											<span class="product-modifier-text">{product.description}</span>
+										{/if}
 									</div>
 									<span class="add-to-cart-pulse" aria-hidden="true">+1</span>
 								</button>
-								<button
-									onclick={() => openProductEditor(product)}
-									class="pos-tile-edit btn btn-xs btn-ghost"
-									title="Edit product"
-								>
-									Edit
-								</button>
+								{#if editMode}
+									<button
+										onclick={() => openProductEditor(product)}
+										class="pos-tile-edit btn btn-xs btn-ghost"
+										title="Edit product"
+									>
+										Edit
+									</button>
+								{/if}
 							</div>
 						</div>
 					{/each}
@@ -728,7 +837,16 @@ let discountPreview = $derived.by(() => {
 				</div>
 			</section>
 
-			<aside class="pos-side flex flex-col">
+			<button
+				type="button"
+				class="pos-resize-handle"
+				class:active={isResizingSidebar}
+				onpointerdown={startSidebarResize}
+				aria-label="Resize checkout panel"
+				title="Resize checkout panel"
+			></button>
+
+			<aside class="pos-side flex flex-col" style={`--pos-side-width: ${sidebarWidth}px;`}>
 				<div class="flex h-[72px] items-center justify-between border-b border-[#e1e3e6] px-5">
 					<div></div>
 					<h1 class="text-[20px] font-semibold text-[#30333a]">Current sale ({itemCount})</h1>
@@ -743,7 +861,7 @@ let discountPreview = $derived.by(() => {
 					</button>
 				</div>
 
-				<div class="pos-cart-scroll min-h-0 flex-1 overflow-y-auto">
+				<div class="pos-cart-scroll min-h-0 flex-1 overflow-y-auto" bind:this={cartScrollElement}>
 					{#if terminalError}
 						<div class="cart-banner cart-banner-error alert alert-error">{terminalError}</div>
 					{/if}
@@ -759,17 +877,32 @@ let discountPreview = $derived.by(() => {
 						{#each cart as line (line.productId)}
 							<li class="cart-line">
 								<div class="cart-line-main">
-									<button
-										type="button"
-										onclick={() => updateLineQuantity(line.productId, line.quantity + 1)}
-										class="cart-line-name"
-										title="Add another"
-									>
-										{#if line.quantity > 1}
-											<span class="cart-qty-badge badge badge-primary badge-sm">{line.quantity}</span>
-										{/if}
-										<span class="cart-name-text">{line.name}</span>
-									</button>
+									<div class="cart-line-title-row">
+										<div class="cart-qty-stepper" aria-label={`${line.name} quantity`}>
+											<button
+												type="button"
+												onclick={() => updateLineQuantity(line.productId, line.quantity - 1)}
+												class="cart-qty-button btn btn-xs btn-outline"
+												title="Decrease quantity"
+												aria-label={`Decrease ${line.name} quantity`}
+											>
+												-
+											</button>
+											<span class="cart-qty-badge badge badge-primary badge-sm" aria-label={`Quantity ${line.quantity}`}>{line.quantity}</span>
+											<button
+												type="button"
+												onclick={() => updateLineQuantity(line.productId, line.quantity + 1)}
+												class="cart-qty-button btn btn-xs btn-outline"
+												title="Increase quantity"
+												aria-label={`Increase ${line.name} quantity`}
+											>
+												+
+											</button>
+										</div>
+										<span class="cart-line-name">
+											<span class="cart-name-text">{line.name}</span>
+										</span>
+									</div>
 									{#if line.description}
 										<div class="cart-line-modifier">{line.description}</div>
 									{/if}
@@ -796,6 +929,18 @@ let discountPreview = $derived.by(() => {
 						{/if}
 					</ul>
 
+					{#if checkoutError}
+						<div class="cart-banner cart-banner-error cart-banner-bottom alert alert-error">{checkoutError}</div>
+					{:else if $v2session.status === 'cancelled'}
+						<div class="cart-banner cart-banner-warn cart-banner-bottom alert alert-warning">
+							Transaction cancelled
+						</div>
+					{:else if !$config.apiKey}
+						<div class="cart-banner cart-banner-muted cart-banner-bottom alert">
+							Configure an API key before charging the sale.
+						</div>
+					{/if}
+
 					{#if cart.length > 0}
 						<div class="cart-totals">
 							<div class="cart-totals-row">
@@ -816,18 +961,6 @@ let discountPreview = $derived.by(() => {
 								<span>Total</span>
 								<span>${formatMoney(total)}</span>
 							</div>
-						</div>
-					{/if}
-
-					{#if checkoutError}
-						<div class="cart-banner cart-banner-error cart-banner-bottom alert alert-error">{checkoutError}</div>
-					{:else if $v2session.status === 'cancelled'}
-						<div class="cart-banner cart-banner-warn cart-banner-bottom alert alert-warning">
-							Transaction cancelled
-						</div>
-					{:else if !$config.apiKey}
-						<div class="cart-banner cart-banner-muted cart-banner-bottom alert">
-							Configure an API key before charging the sale.
 						</div>
 					{/if}
 				</div>
@@ -1049,6 +1182,10 @@ let discountPreview = $derived.by(() => {
 		color: #30333a;
 		color-scheme: light !important;
 		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+		touch-action: manipulation;
+		-webkit-text-size-adjust: 100%;
+		-webkit-user-select: none;
+		user-select: none;
 	}
 
 	.product-editor-backdrop {
@@ -1554,6 +1691,25 @@ let discountPreview = $derived.by(() => {
 		height: 14px;
 	}
 
+	.pos-actions-menu-wrap {
+		position: relative;
+	}
+
+	.pos-actions-menu {
+		position: absolute;
+		top: calc(100% + 8px);
+		right: 0;
+		z-index: 10000;
+		width: 160px;
+	}
+
+	.pos-actions-menu button {
+		width: 100%;
+		height: 34px;
+		color: #30333a !important;
+		font-weight: 700;
+	}
+
 	.pos-shell > div:nth-of-type(1) {
 		display: flex;
 		min-height: 0;
@@ -1579,14 +1735,15 @@ let discountPreview = $derived.by(() => {
 	}
 
 	.pos-grid {
-		--pos-tile-size: 252px;
+		--pos-tile-min-size: 190px;
+		--pos-tile-height: clamp(210px, 28vw, 252px);
 		display: grid;
 		flex: 1 1 auto;
-		grid-template-columns: repeat(auto-fill, var(--pos-tile-size));
-		grid-auto-rows: var(--pos-tile-size);
+		grid-template-columns: repeat(auto-fill, minmax(var(--pos-tile-min-size), 1fr));
+		grid-auto-rows: var(--pos-tile-height);
 		gap: 12px;
 		align-items: start;
-		justify-content: start;
+		justify-content: stretch;
 		min-height: 0;
 		overflow-y: auto;
 		padding: 16px;
@@ -1596,7 +1753,7 @@ let discountPreview = $derived.by(() => {
 	.pos-grid > .pos-tile {
 		position: relative;
 		width: 100%;
-		height: 100%;
+		height: var(--pos-tile-height);
 		align-self: start;
 		min-width: 0;
 		overflow: hidden;
@@ -1606,10 +1763,11 @@ let discountPreview = $derived.by(() => {
 	}
 
 	.pos-tile-inner {
-		position: absolute;
-		inset: 0;
+		position: relative;
 		display: flex;
 		flex-direction: column;
+		width: 100%;
+		height: 100%;
 	}
 
 	.pos-grid > .pos-tile .pos-tile-inner > button:first-child {
@@ -1625,6 +1783,7 @@ let discountPreview = $derived.by(() => {
 	}
 
 	.product-card-button {
+		touch-action: manipulation;
 		transform: translateX(0) scale(1);
 		transform-origin: center center;
 		transition: box-shadow 0.16s ease, transform 0.16s ease;
@@ -1690,13 +1849,9 @@ let discountPreview = $derived.by(() => {
 		padding: 2px 6px;
 		font-size: 11px;
 		color: #6b7280;
-		opacity: 0;
-		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
-		transition: opacity 0.15s ease;
-	}
-
-	.pos-tile:hover .pos-tile-edit {
 		opacity: 1;
+		pointer-events: auto;
+		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
 	}
 
 	.pos-tile-edit:hover {
@@ -1707,20 +1862,60 @@ let discountPreview = $derived.by(() => {
 		display: flex;
 		flex: 0 0 34%;
 		align-items: center;
+		flex-direction: column;
 		justify-content: center;
-		padding: 5px 8px;
+		gap: 3px;
+		padding: 6px 8px;
 		text-align: center;
-		font-size: 17px;
-		font-weight: 700;
 		line-height: 1.1;
 	}
 
 	.pos-side {
 		display: flex;
-		width: clamp(360px, 30vw, 420px);
-		flex: 0 0 clamp(360px, 30vw, 420px);
+		width: var(--pos-side-width, 420px);
+		flex: 0 0 var(--pos-side-width, 420px);
 		flex-direction: column;
 		background: #ffffff !important;
+	}
+
+	.pos-resize-handle {
+		position: relative;
+		z-index: 5;
+		width: 12px;
+		flex: 0 0 12px;
+		border: 0;
+		border-left: 1px solid #d6d9dd;
+		border-right: 1px solid #e5e7eb;
+		background: #f3f4f6;
+		cursor: col-resize;
+		touch-action: none;
+	}
+
+	.pos-resize-handle::after {
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		width: 3px;
+		height: 42px;
+		border-radius: 999px;
+		background: #a8b0bb;
+		content: '';
+		transform: translate(-50%, -50%);
+	}
+
+	.pos-resize-handle:hover,
+	.pos-resize-handle.active {
+		background: #e9f2ff;
+	}
+
+	.pos-resize-handle:hover::after,
+	.pos-resize-handle.active::after {
+		background: #0074f8;
+	}
+
+	:global(body.pos-resizing-sidebar) {
+		cursor: col-resize !important;
+		user-select: none !important;
 	}
 
 	.pos-side > div:first-child {
@@ -1884,15 +2079,38 @@ let discountPreview = $derived.by(() => {
 		background: #d9c4ad;
 	}
 
-	.product-tile-name span {
+	.product-name-text {
 		display: -webkit-box;
 		-webkit-box-orient: vertical;
 		-webkit-line-clamp: 2;
 		line-clamp: 2;
 		overflow: hidden;
 		text-overflow: ellipsis;
-		line-height: 1.15;
 		word-break: break-word;
+		color: #30333a;
+		font-size: 17px;
+		font-weight: 700;
+		line-height: 1.12;
+	}
+
+	.product-price-text {
+		color: #167a38;
+		font-size: 14px;
+		font-weight: 800;
+		font-variant-numeric: tabular-nums;
+		line-height: 1;
+	}
+
+	.product-modifier-text {
+		display: block;
+		max-width: 100%;
+		overflow: hidden;
+		color: #7a828c;
+		font-size: 11px;
+		font-weight: 600;
+		line-height: 1.05;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.food-photo::before,
@@ -2032,7 +2250,7 @@ let discountPreview = $derived.by(() => {
 	}
 
 	.pos-cart-scroll {
-		padding: 16px 16px 12px;
+		padding: 16px 16px 0;
 	}
 
 	.cart-banner {
@@ -2103,10 +2321,42 @@ let discountPreview = $derived.by(() => {
 		min-width: 0;
 	}
 
-	.cart-line-name {
-		display: inline-flex;
+	.cart-line-title-row {
+		display: flex;
+		min-width: 0;
 		align-items: center;
 		gap: 8px;
+	}
+
+	.cart-qty-stepper {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		flex: 0 0 auto;
+	}
+
+	.cart-qty-button {
+		min-height: 0 !important;
+		width: 22px !important;
+		height: 22px !important;
+		padding: 0 !important;
+		border-color: #cfd8e3 !important;
+		color: #4a4f57 !important;
+		font-size: 14px !important;
+		font-weight: 800 !important;
+		line-height: 1 !important;
+	}
+
+	.cart-qty-button:hover {
+		border-color: #0074f8 !important;
+		background: #eef6ff !important;
+		color: #0074d9 !important;
+	}
+
+	.cart-line-name {
+		display: inline-flex;
+		min-width: 0;
+		align-items: center;
 		padding: 0;
 		border: 0;
 		background: transparent;
@@ -2115,11 +2365,6 @@ let discountPreview = $derived.by(() => {
 		color: #0074d9;
 		line-height: 1.25;
 		text-align: left;
-		cursor: pointer;
-	}
-
-	.cart-line-name:hover .cart-name-text {
-		text-decoration: underline;
 	}
 
 	.cart-qty-badge {
@@ -2142,11 +2387,11 @@ let discountPreview = $derived.by(() => {
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-		max-width: 200px;
 	}
 
 	.cart-line-modifier {
-		margin-top: 2px;
+		margin-top: 4px;
+		margin-left: 84px;
 		font-size: 13px;
 		color: #8d939b;
 	}
@@ -2209,9 +2454,14 @@ let discountPreview = $derived.by(() => {
 	}
 
 	.cart-totals {
-		margin-top: 14px;
-		padding: 14px 0 4px;
+		position: sticky;
+		bottom: 0;
+		z-index: 3;
+		margin: 14px -16px 0;
+		padding: 14px 16px 12px;
 		border-top: 1px solid #e1e3e6;
+		background: #ffffff;
+		box-shadow: 0 -10px 18px rgba(15, 23, 42, 0.06);
 	}
 
 	.cart-totals-row {
