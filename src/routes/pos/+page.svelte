@@ -40,6 +40,7 @@ type PaymentMethod = 'credit-card' | 'gift-card';
 	const DEFAULT_SIDEBAR_WIDTH = 420;
 	const MIN_SIDEBAR_WIDTH = 320;
 	const MIN_PRODUCT_AREA_WIDTH = 340;
+	const DISCOUNT_PERCENT_PRESETS = [5, 10, 15, 25, 50];
 
 	const DEFAULT_PRODUCTS: Product[] = [
 		{ id: 'avocado-toast', name: 'Avocado Toast', price: 5.5, photoClass: 'photo-avocado' },
@@ -98,6 +99,7 @@ let lastApprovedAmount = $state('0.00');
 	let cartScrollElement = $state<HTMLDivElement | null>(null);
 	let saleRequestVersion = 0;
 	let previousItemCount = 0;
+	let shouldAutoScrollCart = false;
 
 	let subtotal = $derived(cart.reduce((sum, line) => sum + line.price * line.quantity, 0));
 let discount = $derived.by(() => {
@@ -144,7 +146,7 @@ let discountPreview = $derived.by(() => {
 			return;
 		}
 
-		if (cartScrollElement && nextItemCount > previousItemCount) {
+		if (cartScrollElement && shouldAutoScrollCart && nextItemCount > previousItemCount) {
 			window.requestAnimationFrame(() => {
 				cartScrollElement?.scrollTo({
 					top: cartScrollElement.scrollHeight,
@@ -153,6 +155,7 @@ let discountPreview = $derived.by(() => {
 			});
 		}
 
+		shouldAutoScrollCart = false;
 		previousItemCount = nextItemCount;
 	});
 
@@ -295,15 +298,15 @@ let discountPreview = $derived.by(() => {
 
 	function addToCart(product: Product) {
 		checkoutError = null;
+		shouldAutoScrollCart = true;
 		animateProductAdded(product.id);
 		const existing = cart.find(line => line.productId === product.id);
 
 		if (existing) {
-			cart = cart.map(line =>
-				line.productId === product.id
-					? { ...line, quantity: line.quantity + 1 }
-					: line
-			);
+			cart = [
+				...cart.filter(line => line.productId !== product.id),
+				{ ...existing, quantity: existing.quantity + 1 }
+			];
 			return;
 		}
 
@@ -402,6 +405,12 @@ let discountPreview = $derived.by(() => {
 		appliedDiscountValue = 0;
 		discountInput = '';
 		closeDiscountEditor();
+	}
+
+	function selectPercentDiscountPreset(value: number | null) {
+		discountMode = 'percent';
+		discountInput = value === null ? '' : String(value);
+		discountError = null;
 	}
 
 	function newProductId(name: string): string {
@@ -802,11 +811,11 @@ let discountPreview = $derived.by(() => {
 			<section class="pos-left flex min-w-0 flex-1 flex-col border-r border-[#d6d9dd]">
 				<div class="pos-grid grid flex-1 overflow-y-auto p-4">
 					{#each products as product (product.id)}
-						<div class="pos-tile group rounded-box bg-base-100 shadow-md">
+						<div class="pos-tile group rounded-box shadow-md">
 							<div class="pos-tile-inner">
 								<button
 									onclick={() => addToCart(product)}
-									class="product-card-button flex h-full w-full flex-col overflow-hidden rounded-box bg-base-100 text-left"
+									class="product-card-button flex h-full w-full flex-col overflow-hidden rounded-box text-left"
 									class:adding-to-cart={addedProductId === product.id}
 								>
 									<div class="food-photo {product.photoClass}">
@@ -849,7 +858,7 @@ let discountPreview = $derived.by(() => {
 			<aside class="pos-side flex flex-col" style={`--pos-side-width: ${sidebarWidth}px;`}>
 				<div class="flex h-[72px] items-center justify-between border-b border-[#e1e3e6] px-5">
 					<div></div>
-					<h1 class="text-[20px] font-semibold text-[#30333a]">Current sale ({itemCount})</h1>
+					<h1 class="text-[20px] font-semibold text-[#30333a]">Current Order ({itemCount} items)</h1>
 					<button
 						type="button"
 						onclick={clearSale}
@@ -940,30 +949,35 @@ let discountPreview = $derived.by(() => {
 							Configure an API key before charging the sale.
 						</div>
 					{/if}
-
-					{#if cart.length > 0}
-						<div class="cart-totals">
-							<div class="cart-totals-row">
-								<span>Subtotal</span>
-								<span>${formatMoney(subtotal)}</span>
-							</div>
-							{#if discount > 0}
-								<div class="cart-totals-row cart-totals-discount">
-									<span>Discounts</span>
-									<span>- ${formatMoney(discount)}</span>
-								</div>
-							{/if}
-							<div class="cart-totals-row">
-								<span>Tax</span>
-								<span>${formatMoney(tax)}</span>
-							</div>
-							<div class="cart-totals-row cart-totals-total">
-								<span>Total</span>
-								<span>${formatMoney(total)}</span>
-							</div>
-						</div>
-					{/if}
 				</div>
+
+				{#if cart.length > 0}
+					<div class="cart-totals">
+						<div class="cart-totals-row">
+							<span>Subtotal</span>
+							<span>${formatMoney(subtotal)}</span>
+						</div>
+						{#if discount > 0}
+							<div class="cart-totals-row cart-totals-discount">
+								<span>
+									Discounts
+									{#if appliedDiscountMode === 'percent'}
+										({appliedDiscountValue}%)
+									{/if}
+								</span>
+								<span>- ${formatMoney(discount)}</span>
+							</div>
+						{/if}
+						<div class="cart-totals-row">
+							<span>Tax</span>
+							<span>${formatMoney(tax)}</span>
+						</div>
+						<div class="cart-totals-row cart-totals-total">
+							<span>Total</span>
+							<span>${formatMoney(total)}</span>
+						</div>
+					</div>
+				{/if}
 
 				<div class="checkout-footer border-t border-[#e1e3e6] p-4">
 					<div class="checkout-controls">
@@ -972,7 +986,13 @@ let discountPreview = $derived.by(() => {
 							<span>
 								Discounts
 								{#if discount > 0}
-									<strong>- ${formatMoney(discount)}</strong>
+									<strong>
+										{#if appliedDiscountMode === 'percent'}
+											{appliedDiscountValue}% off
+										{:else}
+											- ${formatMoney(discount)}
+										{/if}
+									</strong>
 								{/if}
 							</span>
 						</button>
@@ -1127,6 +1147,30 @@ let discountPreview = $derived.by(() => {
 				</button>
 			</div>
 
+			<div class="discount-preset-group">
+				<div class="discount-preset-label">Quick percent discounts</div>
+				<div class="discount-preset-grid">
+					{#each DISCOUNT_PERCENT_PRESETS as preset}
+						<button
+							type="button"
+							class="discount-preset-button"
+							class:active={discountMode === 'percent' && Number(discountInput) === preset}
+							onclick={() => selectPercentDiscountPreset(preset)}
+						>
+							{preset}%
+						</button>
+					{/each}
+					<button
+						type="button"
+						class="discount-preset-button"
+						class:active={discountMode === 'percent' && !discountInput}
+						onclick={() => selectPercentDiscountPreset(null)}
+					>
+						Custom
+					</button>
+				</div>
+			</div>
+
 			<div class="mt-4">
 				<label for="discount-value" class="mb-1 block text-sm font-semibold text-[#4a4f57]">
 					{discountMode === 'percent' ? 'Discount percent' : 'Discount amount'}
@@ -1173,10 +1217,15 @@ let discountPreview = $derived.by(() => {
 	:global(html),
 	:global(body) {
 		color-scheme: light !important;
+		height: 100%;
+		overflow: hidden !important;
+		overscroll-behavior: none;
 	}
 
 	.pos-page {
+		height: 100dvh;
 		min-height: 100vh;
+		max-height: 100dvh;
 		overflow: hidden;
 		background: #eef0f3 !important;
 		color: #30333a;
@@ -1395,6 +1444,40 @@ let discountPreview = $derived.by(() => {
 		box-shadow: 0 1px 3px rgba(15, 23, 42, 0.14);
 	}
 
+	.discount-preset-group {
+		margin-top: 16px;
+	}
+
+	.discount-preset-label {
+		margin-bottom: 8px;
+		color: #4a4f57;
+		font-size: 13px;
+		font-weight: 800;
+	}
+
+	.discount-preset-grid {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 8px;
+	}
+
+	.discount-preset-button {
+		height: 40px;
+		border: 1px solid #cfd4da !important;
+		border-radius: 8px;
+		background: #ffffff !important;
+		color: #30333a !important;
+		font-size: 14px;
+		font-weight: 800;
+	}
+
+	.discount-preset-button:hover,
+	.discount-preset-button.active {
+		border-color: #0074f8 !important;
+		background: #eef6ff !important;
+		color: #0074f8 !important;
+	}
+
 	.discount-input-wrap {
 		display: grid;
 		grid-template-columns: 42px 1fr;
@@ -1475,7 +1558,8 @@ let discountPreview = $derived.by(() => {
 		display: flex;
 		flex-direction: column;
 		width: 100vw;
-		height: 100vh;
+		height: 100dvh;
+		max-height: 100dvh;
 		margin: 0;
 		background: #ffffff !important;
 		color-scheme: light !important;
@@ -1714,6 +1798,8 @@ let discountPreview = $derived.by(() => {
 		display: flex;
 		min-height: 0;
 		flex: 1 1 auto;
+		overflow: hidden;
+		overscroll-behavior: none;
 	}
 
 	.pos-left {
@@ -1721,6 +1807,7 @@ let discountPreview = $derived.by(() => {
 		min-width: 0;
 		flex: 1 1 auto;
 		flex-direction: column;
+		overflow: hidden;
 		background: #ffffff !important;
 		border-right: 1px solid #d6d9dd;
 	}
@@ -1746,8 +1833,10 @@ let discountPreview = $derived.by(() => {
 		justify-content: stretch;
 		min-height: 0;
 		overflow-y: auto;
+		overscroll-behavior: contain;
 		padding: 16px;
 		background: #f5f6f7 !important;
+		-webkit-overflow-scrolling: touch;
 	}
 
 	.pos-grid > .pos-tile {
@@ -1758,7 +1847,7 @@ let discountPreview = $derived.by(() => {
 		min-width: 0;
 		overflow: hidden;
 		border-radius: 2px;
-		background: #fff;
+		background: transparent;
 		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
 	}
 
@@ -1778,7 +1867,7 @@ let discountPreview = $derived.by(() => {
 		flex: 1 1 auto;
 		flex-direction: column;
 		padding: 0;
-		background: #fff;
+		background: transparent;
 		color: #3c4047;
 	}
 
@@ -1866,15 +1955,18 @@ let discountPreview = $derived.by(() => {
 		justify-content: center;
 		gap: 3px;
 		padding: 6px 8px;
+		background: #ffffff;
 		text-align: center;
 		line-height: 1.1;
 	}
 
 	.pos-side {
 		display: flex;
+		position: relative;
 		width: var(--pos-side-width, 420px);
 		flex: 0 0 var(--pos-side-width, 420px);
 		flex-direction: column;
+		overflow: hidden;
 		background: #ffffff !important;
 	}
 
@@ -2250,7 +2342,9 @@ let discountPreview = $derived.by(() => {
 	}
 
 	.pos-cart-scroll {
-		padding: 16px 16px 0;
+		padding: 16px 16px 12px;
+		overscroll-behavior: contain;
+		-webkit-overflow-scrolling: touch;
 	}
 
 	.cart-banner {
@@ -2454,21 +2548,18 @@ let discountPreview = $derived.by(() => {
 	}
 
 	.cart-totals {
-		position: sticky;
-		bottom: 0;
-		z-index: 3;
-		margin: 14px -16px 0;
-		padding: 14px 16px 12px;
-		border-top: 1px solid #e1e3e6;
+		flex: 0 0 auto;
+		padding: 10px 16px;
+		border-top: 1px solid #d7dce3;
 		background: #ffffff;
-		box-shadow: 0 -10px 18px rgba(15, 23, 42, 0.06);
+		box-shadow: 0 -8px 18px rgba(15, 23, 42, 0.08);
 	}
 
 	.cart-totals-row {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding: 6px 0;
+		padding: 4px 0;
 		font-size: 15px;
 		color: #4a4f57;
 		font-variant-numeric: tabular-nums;
@@ -2479,8 +2570,8 @@ let discountPreview = $derived.by(() => {
 	}
 
 	.cart-totals-total {
-		margin-top: 6px;
-		padding-top: 12px;
+		margin-top: 4px;
+		padding-top: 8px;
 		border-top: 1px solid #e1e3e6;
 		font-size: 18px;
 		font-weight: 700;
