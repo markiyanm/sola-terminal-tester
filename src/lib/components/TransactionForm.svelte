@@ -11,7 +11,12 @@
 		{ value: 'gift:balance', label: 'Gift Balance', requiresAmount: false },
 		{ value: 'gift:issue', label: 'Gift Issue', requiresAmount: true },
 		{ value: 'gift:redeem', label: 'Gift Redeem', requiresAmount: true },
-		{ value: 'gift:activate', label: 'Gift Activate', requiresAmount: true }
+		{ value: 'gift:activate', label: 'Gift Activate', requiresAmount: true },
+		{ value: 'ebtcb:sale', label: 'EBT Cash Benefit Sale', requiresAmount: true },
+		{ value: 'ebtfs:sale', label: 'EBT Food Stamp Sale', requiresAmount: true },
+		{ value: 'ebtfs:credit', label: 'EBT Food Stamp Credit (Refund)', requiresAmount: true },
+		{ value: 'ebtfs:balance', label: 'EBT Food Stamp Balance', requiresAmount: false },
+		{ value: 'ebtcb:balance', label: 'EBT Cash Benefit Balance', requiresAmount: false }
 	];
 	
 	let command = $state('cc:sale');

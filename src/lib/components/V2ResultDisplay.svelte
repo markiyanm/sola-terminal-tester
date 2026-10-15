@@ -196,6 +196,12 @@
 							<p class="text-sm font-mono text-gray-100">{$v2session.remainingBalance}</p>
 						</div>
 					{/if}
+					{#if $v2session.tranFee}
+						<div>
+							<p class="text-xs text-gray-500 uppercase tracking-wide">Surcharge (xTranFee)</p>
+							<p class="text-sm font-mono text-gray-100">{$v2session.tranFee}</p>
+						</div>
+					{/if}
 				</div>
 			{/if}
 

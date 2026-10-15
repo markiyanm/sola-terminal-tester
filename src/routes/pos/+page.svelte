@@ -32,7 +32,14 @@
 	};
 
 type DiscountMode = 'percent' | 'amount';
-type PaymentMethod = 'credit-card' | 'gift-card';
+type PaymentMethod = 'credit-card' | 'gift-card' | 'ebt-cash' | 'ebt-food';
+
+	const PAYMENT_METHODS: { value: PaymentMethod; label: string; command: string }[] = [
+		{ value: 'credit-card', label: 'Credit Card', command: 'cc:sale' },
+		{ value: 'gift-card', label: 'Gift Card', command: 'gift:redeem' },
+		{ value: 'ebt-cash', label: 'EBT Cash', command: 'ebtcb:sale' },
+		{ value: 'ebt-food', label: 'EBT Food', command: 'ebtfs:sale' }
+	];
 
 	const PRODUCTS_STORAGE_KEY = 'sola_terminal_tester_pos_products_square_style';
 	const POS_SIDEBAR_WIDTH_STORAGE_KEY = 'sola_terminal_tester_pos_sidebar_width';
@@ -134,9 +141,11 @@ let discountPreview = $derived.by(() => {
 		$selectedDeviceId &&
 		cart.length > 0 &&
 		(selectedDeviceOnline || bypassStatusCheck) &&
-		!isCheckingOut
+		!isCheckingOut &&
+		!isRefreshingDevices
 	);
 	let statusDateTime = $derived(formatStatusDateTime(currentTime));
+	let paymentMethodLabel = $derived(PAYMENT_METHODS.find(m => m.value === paymentMethod)?.label ?? 'Credit Card');
 
 	$effect(() => {
 		const nextItemCount = itemCount;
@@ -163,6 +172,7 @@ let discountPreview = $derived.by(() => {
 		config.init();
 		devices.init();
 		selectedDeviceId.init();
+		if ($config.apiKey) refreshTerminals();
 		products = loadProducts();
 		sidebarWidth = loadSidebarWidth();
 
@@ -554,7 +564,7 @@ let discountPreview = $derived.by(() => {
 
 		const requestVersion = ++saleRequestVersion;
 		const saleAmount = formatMoney(total);
-		const saleCommand = paymentMethod === 'gift-card' ? 'gift:redeem' : 'cc:sale';
+		const saleCommand = PAYMENT_METHODS.find(m => m.value === paymentMethod)?.command ?? 'cc:sale';
 		const externalRequestId = `pos-${Date.now()}`;
 		const invoice = `POS-${Date.now().toString().slice(-8)}`;
 		const endpointUrl = getV2SessionEndpointUrl($config.selectedEnvironment, $config.customBaseUrl);
@@ -632,6 +642,7 @@ let discountPreview = $derived.by(() => {
 					isVoid: result.xVoid as boolean,
 					isVoidable: result.xVoidable as boolean,
 					remainingBalance: result.xRemainingBalance as string,
+					tranFee: result.xTranFee as string,
 					responseData: cleanResponse
 				});
 				cart = [];
@@ -1000,6 +1011,8 @@ let discountPreview = $derived.by(() => {
 						<select class="payment-method-select select select-bordered" bind:value={paymentMethod}>
 							<option value="credit-card">Credit Card</option>
 							<option value="gift-card">Gift Card</option>
+							<option value="ebt-cash">EBT Cash</option>
+							<option value="ebt-food">EBT Food</option>
 						</select>
 					</div>
 
@@ -1099,9 +1112,15 @@ let discountPreview = $derived.by(() => {
 					<span>Amount</span>
 					<strong>${lastApprovedAmount}</strong>
 				</div>
+				{#if $v2session.tranFee}
+					<div>
+						<span>Surcharge</span>
+						<strong>${$v2session.tranFee}</strong>
+					</div>
+				{/if}
 				<div>
 					<span>Method</span>
-					<strong>{paymentMethod === 'gift-card' ? 'Gift Card' : 'Credit Card'}</strong>
+					<strong>{paymentMethodLabel}</strong>
 				</div>
 			</div>
 			<button type="button" class="approval-primary btn btn-success" onclick={startNewSale}>Start new sale</button>

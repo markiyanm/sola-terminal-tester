@@ -14,6 +14,7 @@
 		config.init();
 		devices.init();
 		selectedDeviceId.init();
+		if ($config.apiKey) deviceManager?.refreshDevices();
 	});
 
 	function handleApiKeyChanged() {
@@ -109,6 +110,16 @@
 						<li><code class="text-xs bg-gray-800 text-gray-300 px-1 rounded">cc:authonly</code> - Authorization only</li>
 						<li><code class="text-xs bg-gray-800 text-gray-300 px-1 rounded">cc:credit</code> - Refund</li>
 						<li><code class="text-xs bg-gray-800 text-gray-300 px-1 rounded">gift:balance</code> - Check balance</li>
+					</ul>
+				</div>
+				<div>
+					<h3 class="font-medium text-gray-300 mb-1">EBT Operations</h3>
+					<ul class="text-gray-400 space-y-0.5">
+						<li><code class="text-xs bg-gray-800 text-gray-300 px-1 rounded">ebtcb:sale</code> - Cash benefit sale</li>
+						<li><code class="text-xs bg-gray-800 text-gray-300 px-1 rounded">ebtfs:sale</code> - Food stamp sale</li>
+						<li><code class="text-xs bg-gray-800 text-gray-300 px-1 rounded">ebtfs:credit</code> - Food stamp refund</li>
+						<li><code class="text-xs bg-gray-800 text-gray-300 px-1 rounded">ebtfs:balance</code> - Food stamp balance</li>
+						<li><code class="text-xs bg-gray-800 text-gray-300 px-1 rounded">ebtcb:balance</code> - Cash benefit balance</li>
 					</ul>
 				</div>
 			</div>

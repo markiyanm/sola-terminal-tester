@@ -102,6 +102,7 @@ export interface SessionInitiateResponse {
 	xRefnum?: string;
 	xResult?: string;
 	xError?: string;
+	[key: string]: unknown;
 }
 
 export async function initiateSession(params: InitiateSessionParams): Promise<SessionInitiateResponse> {
@@ -121,6 +122,7 @@ export interface SessionStatusResponse {
 	xRefnum?: string;
 	xResult?: string;
 	xError?: string;
+	[key: string]: unknown;
 }
 
 export async function getSessionStatus(
@@ -156,7 +158,7 @@ export async function cancelSession(
 export async function getTransactionReport(
 	apiKey: string,
 	refNum: string
-): Promise<unknown> {
+): Promise<Record<string, unknown>> {
 	const response = await fetch('/api/report', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },

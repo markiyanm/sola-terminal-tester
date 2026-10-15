@@ -25,6 +25,7 @@ export interface V2SessionState {
 	isVoid: boolean | null;
 	isVoidable: boolean | null;
 	remainingBalance: string | null;
+	tranFee: string | null;       // xTranFee: surcharge, only present on surcharged transactions
 	// Full response body
 	responseData: unknown | null;
 	// Debug info for V2 session call (request set immediately, response filled later)
@@ -60,6 +61,7 @@ const initialState: V2SessionState = {
 	isVoid: null,
 	isVoidable: null,
 	remainingBalance: null,
+	tranFee: null,
 	responseData: null,
 	debug: null,
 	debugResponsePending: false,
@@ -132,6 +134,7 @@ function createV2SessionStore() {
 			isVoid?: boolean;
 			isVoidable?: boolean;
 			remainingBalance?: string;
+			tranFee?: string;
 			responseData: unknown;
 		}) => {
 			update(state => ({
@@ -154,6 +157,7 @@ function createV2SessionStore() {
 				isVoid: data.isVoid ?? null,
 				isVoidable: data.isVoidable ?? null,
 				remainingBalance: data.remainingBalance || null,
+				tranFee: data.tranFee || null,
 				responseData: data.responseData,
 				debugResponsePending: false
 			}));

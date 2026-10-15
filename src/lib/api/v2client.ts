@@ -31,6 +31,7 @@ export interface V2SessionResponse {
 	xVoid?: boolean;
 	xVoidable?: boolean;
 	xRemainingBalance?: string;
+	xTranFee?: string;      // Surcharge amount; only present on surcharged credit transactions
 	_debug?: {
 		request: {
 			method: string;

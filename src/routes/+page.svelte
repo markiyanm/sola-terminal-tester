@@ -15,6 +15,8 @@
 		config.init();
 		devices.init();
 		selectedDeviceId.init();
+		// Cached statuses can be stale, so always re-fetch on load
+		if ($config.apiKey) deviceManager?.refreshDevices();
 	});
 	
 	function handleApiKeyChanged() {
@@ -98,6 +100,16 @@
 						<li><code class="text-xs bg-gray-800 text-gray-300 px-1 rounded">gift:balance</code> - Check balance</li>
 						<li><code class="text-xs bg-gray-800 text-gray-300 px-1 rounded">gift:issue</code> - Issue new card</li>
 						<li><code class="text-xs bg-gray-800 text-gray-300 px-1 rounded">gift:redeem</code> - Redeem amount</li>
+					</ul>
+				</div>
+				<div>
+					<h3 class="font-medium text-gray-300 mb-1">EBT Operations</h3>
+					<ul class="text-gray-400 space-y-0.5">
+						<li><code class="text-xs bg-gray-800 text-gray-300 px-1 rounded">ebtcb:sale</code> - Cash benefit sale</li>
+						<li><code class="text-xs bg-gray-800 text-gray-300 px-1 rounded">ebtfs:sale</code> - Food stamp sale</li>
+						<li><code class="text-xs bg-gray-800 text-gray-300 px-1 rounded">ebtfs:credit</code> - Food stamp refund</li>
+						<li><code class="text-xs bg-gray-800 text-gray-300 px-1 rounded">ebtfs:balance</code> - Food stamp balance</li>
+						<li><code class="text-xs bg-gray-800 text-gray-300 px-1 rounded">ebtcb:balance</code> - Cash benefit balance</li>
 					</ul>
 				</div>
 				<div>
